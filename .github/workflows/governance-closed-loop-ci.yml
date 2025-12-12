@@ -36,6 +36,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Restrict permissions to minimum required
+permissions:
+  contents: read
+
 env:
   PYTHON_VERSION: "3.11"
   OPA_VERSION: "0.60.0"
@@ -479,9 +483,9 @@ jobs:
 
       - name: Scan Technical Debt Markers
         run: |
-          echo "=" 
+          echo "============================================================"
           echo "📊 TECHNICAL DEBT TRACKING"
-          echo "="
+          echo "============================================================"
 
           # Count TODO markers
           echo -e "\n📌 TODO markers:"
@@ -543,9 +547,9 @@ jobs:
 
       - name: Check SBOM
         run: |
-          echo "="
+          echo "============================================================"
           echo "🔒 SECURITY CHECK"
-          echo "="
+          echo "============================================================"
 
           # Check for SBOM files
           echo -e "\n📌 SBOM Files:"

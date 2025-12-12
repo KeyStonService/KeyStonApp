@@ -157,12 +157,12 @@ graph TD
 - [x] Create `governance-closed-loop-ci.yml`
 - [x] Create `CI_REFACTORING_GUIDE.md`
 - [ ] Test new governance CI on feature branch
-- [ ] Document deprecated workflows
+- [x] Document deprecated workflows
 
 ### Phase 2: Mid-Term (中期) - Week 3-4
 
-- [ ] Add deprecation notices to redundant workflows
-- [ ] Update documentation references
+- [x] Add deprecation notices to redundant workflows (5 workflows marked)
+- [x] Update documentation references (README.md, WORKFLOW_INDEX.md)
 - [ ] Monitor CI costs before/after
 - [ ] Gather feedback from team
 
