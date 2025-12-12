@@ -30,13 +30,13 @@
 | 自主/無人 | `autonomous/`, `v1-python-drones/`, `v2-multi-islands/` | 無人機與多島嶼框架 |
 | 服務/代理 | `services/`, `agent/`, `mcp-servers/` | 長生命週期代理、MCP 工具端點 |
 | 前端/應用 | `frontend/`, `apps/` | UI 套件與 Web 應用 |
-| 治理/政策 | `governance/`, `config/` | 23 維治理矩陣（涵蓋 23 個治理維度，詳見 `governance/README.md` 等）與統一配置/模組映射 (`config/system-module-map.yaml`) |
+| 治理/政策 | `governance/`, `config/` | 23 維治理矩陣（涵蓋 00-40 等治理維度，詳見 `governance/` 子目錄與 `config/system-module-map.yaml`）與統一配置/模組映射 (`config/system-module-map.yaml`) |
 | 基礎設施 | `infrastructure/`, `infra/`, `deployment/` | K8s、監控、canary、部署腳本 |
 | 測試/質量 | `tests/`, `scripts/`, `tools/` | 單元/性能測試、輔助腳本、CI 工具 |
 | 文檔 | `docs/`, `knowledge/` | 文件、索引、報告；生成文件集中於 `docs/generated/` |
 | 其他歷史資產 | `legacy/`, `experiments/`, `supply-chain/`, `bridges/` | 歷史遺留與橋接實驗 |
 
-> ⚠️ 如需完整樹狀結構（含檔案層級），請參考已存在的 `./docs/DIRECTORY_TREE.md`。若需語義對應與治理邊界，請依此文檔與 `config/system-module-map.yaml`。
+> ⚠️ 如需完整樹狀結構（含檔案層級），請參考已存在的 `docs/DIRECTORY_TREE.md`。若需語義對應與治理邊界，請依此文檔與 `config/system-module-map.yaml`。
 
 ---
 
