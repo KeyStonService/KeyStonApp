@@ -1,16 +1,15 @@
 import { createHash, randomUUID } from 'crypto';
 import { readFile, stat } from 'fs/promises';
-import * as path from 'path';
 import { tmpdir } from 'os';
+import * as path from 'path';
 
 // Define a safe root directory for allowed file operations
 const SAFE_ROOT = path.resolve(process.cwd(), 'safefiles');
 // Allowed absolute path prefixes based on environment
 // In test: allow tmpdir for test files
 // In production: allow project workspace and safefiles directory only
-const ALLOWED_ABSOLUTE_PREFIXES = process.env.NODE_ENV === 'test' 
-  ? [tmpdir(), process.cwd()] 
-  : [process.cwd()];
+const ALLOWED_ABSOLUTE_PREFIXES =
+  process.env.NODE_ENV === 'test' ? [tmpdir(), process.cwd()] : [process.cwd()];
 import { SLSAAttestationService, SLSAProvenance, BuildMetadata } from './attestation';
 
 export interface BuildAttestation {
@@ -100,8 +99,8 @@ export class ProvenanceService {
     if (path.isAbsolute(subjectPath)) {
       // For absolute paths, validate against allowed prefixes (security check)
       resolvedPath = path.normalize(subjectPath);
-      const isAllowed = ALLOWED_ABSOLUTE_PREFIXES.some(prefix => 
-        resolvedPath.startsWith(prefix + path.sep) || resolvedPath === prefix
+      const isAllowed = ALLOWED_ABSOLUTE_PREFIXES.some(
+        (prefix) => resolvedPath.startsWith(prefix + path.sep) || resolvedPath === prefix
       );
       if (!isAllowed) {
         throw new Error('Invalid file path: Absolute paths must be within allowed directories.');
