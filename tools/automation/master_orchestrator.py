@@ -242,7 +242,110 @@ class EngineRegistry:
         return self._engine_classes.get(name)
 
     def discover_engines(self, search_paths: List[Path]) -> List[Dict[str, Any]]:
-        """發現引擎"""
+        """
+        Automatically discover and collect engine metadata from specified directories.
+
+        This method implements a dual-strategy engine discovery system that scans
+        filesystem paths for both Python modules containing BaseEngine subclasses
+        and YAML configuration files defining engine specifications.
+
+        Discovery Strategies:
+        ---------------------
+        1. **Python Module Introspection**:
+           - Recursively scans for all `*.py` files in search paths
+           - Excludes files starting with underscore (private modules)
+           - Dynamically loads modules and inspects for BaseEngine subclasses
+           - Extracts engine metadata (class name, module path, engine type)
+
+        2. **YAML Configuration Discovery**:
+           - Recursively searches for `engine.yaml` configuration files
+           - Loads and parses YAML structure
+           - Augments config with file path for reference
+           - Supports declarative engine definitions
+
+        Parameters:
+        -----------
+        search_paths : List[Path]
+            List of directory paths to search for engines. Non-existent paths
+            are silently skipped without raising errors.
+
+        Returns:
+        --------
+        List[Dict[str, Any]]
+            List of discovered engine metadata dictionaries. Each dictionary
+            contains engine configuration and registration information.
+
+            For Python module discoveries, each dict contains:
+            - `class_name` (str): Name of the BaseEngine subclass
+            - `module_path` (str): Absolute path to the Python module file
+            - `engine_type` (str): Engine type value from ENGINE_TYPE attribute
+                                   or defaults to "execution"
+
+            For YAML config discoveries, each dict contains:
+            - All fields defined in the YAML file
+            - `config_path` (str): Absolute path to the configuration file
+
+        Behavior:
+        ---------
+        - **Non-blocking**: Discovery failures are logged at DEBUG level and
+          do not halt the overall discovery process
+        - **Recursive**: Searches entire directory trees using rglob patterns
+        - **Safe**: Catches and handles module loading exceptions gracefully
+        - **Deduplication**: Caller is responsible for handling duplicate
+          discoveries (same engine found via both strategies)
+
+        File Exclusions:
+        ----------------
+        - Python files starting with `_` (e.g., `__init__.py`, `_private.py`)
+        - Directories without read permissions (silently skipped)
+
+        Module Loading:
+        ---------------
+        - Uses `importlib.util.spec_from_file_location` for dynamic loading
+        - Modules are loaded in isolated namespace to prevent conflicts
+        - Only inspects module-level class definitions
+        - Does not instantiate engines during discovery phase
+
+        Error Handling:
+        ---------------
+        - Invalid Python syntax: Logged and skipped
+        - Import errors: Logged and skipped
+        - YAML parse errors: Logged and skipped
+        - File permission errors: Silently skipped
+
+        Example Usage:
+        --------------
+        >>> registry = EngineRegistry()
+        >>> search_paths = [
+        ...     Path("tools/automation/engines"),
+        ...     Path("tools/refactor")
+        ... ]
+        >>> engines = registry.discover_engines(search_paths)
+        >>> print(f"Discovered {len(engines)} engines")
+        Discovered 5 engines
+        >>> for engine in engines:
+        ...     print(f"  - {engine.get('class_name')} from {engine.get('module_path')}")
+          - ValidationEngine from /app/tools/automation/engines/validation.py
+          - GenerationEngine from /app/tools/automation/engines/generation.py
+
+        Performance Considerations:
+        ---------------------------
+        - Discovery time scales with number of files in search paths
+        - Module loading incurs one-time import cost per Python file
+        - Recommended to cache results and re-discover only on file changes
+        - Consider using file system watchers for production deployments
+
+        Thread Safety:
+        --------------
+        This method is NOT thread-safe. Callers must ensure external
+        synchronization if called from multiple threads concurrently.
+
+        See Also:
+        ---------
+        - `_inspect_module()`: Internal method for Python module introspection
+        - `register_engine()`: Register discovered engines for use
+        - `EngineConfig`: Expected configuration structure for engines
+        """
         discovered = []
 
         for search_path in search_paths:
@@ -275,7 +378,107 @@ class EngineRegistry:
         return discovered
 
     def _inspect_module(self, module_path: Path) -> List[Dict[str, Any]]:
-        """檢查模組中的引擎類"""
+        """
+        Inspect a Python module file to discover BaseEngine subclasses.
+
+        This internal method dynamically loads a Python module and uses runtime
+        introspection to identify all classes that inherit from BaseEngine. It
+        extracts metadata from discovered engine classes for registration.
+
+        Parameters:
+        -----------
+        module_path : Path
+            Absolute or relative path to the Python module file (.py) to inspect.
+
+        Returns:
+        --------
+        List[Dict[str, Any]]
+            List of dictionaries containing metadata for each discovered engine class.
+            Returns an empty list if no engines are found or if module loading fails.
+
+            Each dictionary contains:
+            - `class_name` (str): The name of the discovered engine class
+            - `module_path` (str): Absolute path string to the module file
+            - `engine_type` (str): Engine type extracted from the class's ENGINE_TYPE
+                                   attribute, defaults to "execution" if not present
+
+        Discovery Process:
+        ------------------
+        1. Creates a module spec from the file path using importlib
+        2. Loads the module in an isolated namespace
+        3. Executes the module to populate its namespace
+        4. Iterates through all module-level attributes
+        5. Identifies classes that meet engine criteria
+        6. Extracts metadata from qualifying classes
+
+        Engine Class Criteria:
+        ----------------------
+        A class is considered a valid engine if ALL of these conditions are met:
+        - Is a Python class (type instance)
+        - Is a subclass of BaseEngine
+        - Is NOT the BaseEngine class itself (no self-inheritance)
+        - Class name does not start with underscore (public classes only)
+
+        Metadata Extraction:
+        --------------------
+        - **class_name**: Directly from the class `__name__` attribute
+        - **module_path**: Converted to string for JSON serialization
+        - **engine_type**: Reads the ENGINE_TYPE class attribute if present,
+                           otherwise defaults to EngineType.EXECUTION
+
+        Error Handling:
+        ---------------
+        All exceptions during module loading and introspection are silently
+        caught and ignored. This ensures that:
+        - Syntax errors in modules don't crash discovery
+        - Missing dependencies don't halt the process
+        - Malformed modules are gracefully skipped
+
+        Common failure scenarios:
+        - ImportError: Module has missing dependencies
+        - SyntaxError: Module contains invalid Python syntax
+        - AttributeError: Module has unexpected structure
+        - FileNotFoundError: Module path is invalid (should not occur with proper caller)
+
+        Security Considerations:
+        ------------------------
+        - **Code Execution**: This method executes arbitrary Python code from files
+        - **Trust Boundary**: Only use with trusted module paths from controlled
+          search directories
+        - **Isolation**: Each module is loaded in a fresh namespace to prevent
+          cross-contamination
+        - **No Sandbox**: This method does NOT provide security sandboxing
+
+        Performance Notes:
+        ------------------
+        - Module loading has O(n) complexity where n = file size
+        - Class introspection is O(m) where m = number of module attributes
+        - Each module is loaded only once per discovery cycle
+        - Consider caching results for frequently inspected modules
+
+        Example Discovered Metadata:
+        ----------------------------
+        >>> engines = registry._inspect_module(Path("engines/validator.py"))
+        >>> print(engines)
+        [
+            {
+                'class_name': 'ValidationEngine',
+                'module_path': '/app/tools/automation/engines/validator.py',
+                'engine_type': 'validation'
+            },
+            {
+                'class_name': 'SyntaxValidationEngine',
+                'module_path': '/app/tools/automation/engines/validator.py',
+                'engine_type': 'validation'
+            }
+        ]
+
+        See Also:
+        ---------
+        - `discover_engines()`: Public method that calls this for module discovery
+        - `BaseEngine`: The base class that all engines must inherit from
+        - `EngineType`: Enum defining valid engine type values
+        """
         engines = []
 
         try:
