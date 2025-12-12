@@ -20,7 +20,7 @@
 
 ### 2. Actual Repository Surface (2025-12-12) 實際目錄快照
 
-> 來源: `ls` 觀察 `/home/runner/work/SynergyMesh/SynergyMesh` 根目錄  
+> 來源: `ls` 觀察當前 repository root  
 > 作用: 提供 AI 代理與開發者快速對照「真實存在的目錄」與上層語義邊界
 
 | 分類 | 主要目錄 (僅列核心) | 備註 |
