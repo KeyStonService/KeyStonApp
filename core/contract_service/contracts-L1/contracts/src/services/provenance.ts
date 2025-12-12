@@ -55,9 +55,9 @@ async function validateAndNormalizePath(
       return canonicalPath;
     }
 
-    // Ensure the canonical path is within safeRoot
-    // Use path.sep to ensure proper directory boundary checking
-    if (!canonicalPath.startsWith(safeRoot + path.sep) && canonicalPath !== safeRoot) {
+    // Ensure the canonical path is within safeRoot using robust relative check
+    const relative = path.relative(safeRoot, canonicalPath);
+    if (relative.startsWith('..') || path.isAbsolute(relative)) {
       throw new Error('Invalid file path: Access outside of allowed directory is not permitted');
     }
 
@@ -73,8 +73,9 @@ async function validateAndNormalizePath(
       throw error;
     }
 
-    // Ensure the normalized path is within safeRoot
-    if (!normalizedPath.startsWith(safeRoot + path.sep) && normalizedPath !== safeRoot) {
+    // Ensure the normalized path is within safeRoot using robust relative check
+    const relative = path.relative(safeRoot, normalizedPath);
+    if (relative.startsWith('..') || path.isAbsolute(relative)) {
       throw new Error('Invalid file path: Access outside of allowed directory is not permitted');
     }
 
