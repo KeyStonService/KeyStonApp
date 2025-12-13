@@ -1,0 +1,42 @@
+name: Governance Trigger
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  trigger-governance:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Run governance tool
+        continue-on-error: true
+        run: |
+          npx ts-node --esm --transpile-only governance/dimensions/81-auto-comment/scripts/generate-comment.ts \
+            --workflow "GitHub CI Trigger" \
+            --run-id "${{ github.run_id }}" \
+            --commit "${{ github.sha }}" \
+            --branch "${{ github.ref_name }}" \
+            --pr-number "${{ github.event.pull_request.number || '' }}"
+
+          node governance/dimensions/81-auto-comment/scripts/update-registry.js \
+            --event-id "auto-comment-${{ github.run_id }}" \
+            --status "triggered" \
+            --workflow "GitHub CI Trigger" \
+            --commit "${{ github.sha }}" \
+            --branch "${{ github.ref_name }}" \
+            --pr-number "${{ github.event.pull_request.number || '' }}"
