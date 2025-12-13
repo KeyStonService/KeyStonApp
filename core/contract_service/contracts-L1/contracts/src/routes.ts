@@ -29,8 +29,7 @@
 import { Router, Request, Response } from 'express';
 import type { Router as RouterType } from 'express';
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const rateLimit = require('express-rate-limit');
+import rateLimit from 'express-rate-limit';
 
 import { AssignmentController } from './controllers/assignment';
 import { EscalationController } from './controllers/escalation';
