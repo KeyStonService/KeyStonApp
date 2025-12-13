@@ -2,6 +2,8 @@ name: Governance Trigger
 
 # CI acts only as an event trigger; governance scripts handle analysis/remediation.
 # Workflow is non-blocking (continue-on-error) but logs failures for visibility.
+# Replaces legacy validation/test/build workflows with an event-dispatcher to governance tools.
+# Governance tooling records events/comments; pipeline stays green even if tooling fails.
 
 on:
   pull_request:
