@@ -39,10 +39,16 @@ jobs:
             --branch "${{ github.ref_name }}" \
             --pr-number "${{ github.event.pull_request.number || '' }}"
 
-          node governance/dimensions/81-auto-comment/scripts/update-registry.js \
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          if [ -n "$PR_NUMBER" ]; then
+            PR_NUMBER_ARG="--pr-number \"$PR_NUMBER\""
+          else
+            PR_NUMBER_ARG=""
+          fi
+          eval node governance/dimensions/81-auto-comment/scripts/update-registry.js \
             --event-id "auto-comment-${{ github.run_id }}" \
             --status "triggered" \
             --workflow "GitHub CI Trigger" \
             --commit "${{ github.sha }}" \
             --branch "${{ github.ref_name }}" \
-            --pr-number "${{ github.event.pull_request.number || '' }}"
+            $PR_NUMBER_ARG
