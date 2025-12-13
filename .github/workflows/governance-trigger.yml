@@ -39,8 +39,8 @@ jobs:
       - name: Run governance tool
         working-directory: ${{ env.SCRIPT_DIR }}
         run: |
-          PR_NUMBER="${{ github.event.pull_request.number }}"
-          if [ -n "$PR_NUMBER" ]; then
+          PR_NUMBER="${{ github.event.pull_request.number || '' }}"
+          if [ "$PR_NUMBER" != "" ]; then
             PR_ARG="--pr-number \"$PR_NUMBER\""
           else
             PR_ARG=""
