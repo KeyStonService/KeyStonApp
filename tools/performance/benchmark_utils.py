@@ -8,7 +8,7 @@ Provides utilities to measure and compare performance of optimized vs original c
 
 import time
 import functools
-from typing import Callable, Any, Dict, List, Tuple
+from typing import Callable, Any, Dict, List, Tuple, Optional
 from dataclasses import dataclass, field
 
 
@@ -41,7 +41,7 @@ def benchmark(
     *args,
     iterations: int = 1,
     warmup: int = 0,
-    name: str = None,
+    name: Optional[str] = None,
     **kwargs
 ) -> BenchmarkResult:
     """Benchmark a function's execution time."""

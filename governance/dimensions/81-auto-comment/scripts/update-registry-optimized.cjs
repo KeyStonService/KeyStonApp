@@ -50,6 +50,8 @@ const EVENT_FILE_PATH = path.join(
 let registryCache = null;
 let registryCacheTime = 0;
 // Cache TTL in milliseconds (default: 5s, configurable via environment variable)
+// 5 seconds provides a good balance between reducing file I/O and ensuring fresh data
+// for most CI/CD scenarios where multiple updates may occur in quick succession
 const CACHE_TTL = parseInt(process.env.REGISTRY_CACHE_TTL || "5000", 10);
 
 // =============================================================================
@@ -170,7 +172,9 @@ async function loadRegistry() {
  * Save registry asynchronously with atomic write
  */
 async function saveRegistry(registry) {
-  const tempPath = REGISTRY_PATH + '.tmp';
+  // Create temp file in same directory for atomic rename
+  const dir = path.dirname(REGISTRY_PATH);
+  const tempPath = path.join(dir, '.registry.tmp');
   
   try {
     // Ensure directory exists
