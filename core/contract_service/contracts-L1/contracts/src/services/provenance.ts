@@ -24,6 +24,17 @@ function isPathContained(targetPath: string, rootPath: string): boolean {
 }
 
 /**
+ * Checks if a normalized path contains consecutive path separators,
+ * which could indicate a path normalization bypass attempt.
+ * This check is performed after path normalization to avoid false positives
+ * on Windows UNC paths or legitimate URLs.
+ */
+function hasConsecutiveSeparators(normalizedPath: string): boolean {
+  // Check for consecutive forward slashes (Unix) or backslashes (Windows)
+  return normalizedPath.includes('//') || normalizedPath.includes('\\\\');
+}
+
+/**
  * Checks if a path is within the system temp directory in test mode.
  */
 function isInTestTmpDir(targetPath: string, systemTmpDir: string): boolean {
@@ -77,7 +88,6 @@ async function validateAndNormalizePath(
   if (
     filePath.includes('\0') ||
     filePath.includes('..') ||
-    filePath.includes('//') ||
     path.isAbsolute(filePath)
   ) {
     throw new Error('Invalid file path: Directory traversal or absolute paths are not permitted.');
@@ -88,6 +98,11 @@ async function validateAndNormalizePath(
 
   try {
     const canonicalPath = await realpath(resolvedPath);
+
+    // Check for consecutive separators after path resolution to detect normalization bypasses
+    if (hasConsecutiveSeparators(canonicalPath)) {
+      throw new Error('Invalid file path: Path normalization bypass detected');
+    }
 
     // FINAL GUARD: Path must start with SAFE_ROOT or allowed test directory, comparing canonical (real) paths
     if (isInTestTmpDir(canonicalPath, systemTmpDir)) {
@@ -105,6 +120,11 @@ async function validateAndNormalizePath(
     return canonicalPath;
   } catch (error) {
     const normalizedPath = path.normalize(resolvedPath);
+
+    // Check for consecutive separators after normalization to detect bypass attempts
+    if (hasConsecutiveSeparators(normalizedPath)) {
+      throw new Error('Invalid file path: Path normalization bypass detected');
+    }
 
     if (isInTestTmpDir(normalizedPath, systemTmpDir)) {
       if (!isPathContained(normalizedPath, systemTmpDir)) {
