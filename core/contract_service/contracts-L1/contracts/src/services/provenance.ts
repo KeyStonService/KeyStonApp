@@ -66,7 +66,10 @@ export interface Dependency {
 export class ProvenanceService {
   private slsaService: SLSAAttestationService;
   // Define the root directory for allowed files. Change as needed for your project needs
-  private static readonly SAFE_ROOT = process.cwd();
+  // Use a fixed absolute path or environment variable for SAFE_ROOT
+  private static readonly SAFE_ROOT = process.env.SAFE_ROOT_PATH
+    ? resolve(process.env.SAFE_ROOT_PATH)
+    : resolve(__dirname, '../../safefiles');
 
   constructor() {
     this.slsaService = new SLSAAttestationService();
