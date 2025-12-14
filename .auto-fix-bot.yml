@@ -102,7 +102,7 @@ analysis:
           auto_fix: true
         - type: "code_injection"
           description: "檢測代碼注入風險 (Alert #37)"
-          patterns: ["eval\\(", "exec\\(", "__import__"]
+          patterns: ["eval\\s*\\(", "exec\\s*\\(", "__import__\\s*\\("]
           auto_fix: true
       
     # 性能分析 (Performance Analysis)
@@ -206,11 +206,13 @@ fix:
               throw new Error('Access denied');
             }
         - language: "python"
-          add_imports: ["from pathlib import Path"]
+          add_imports: ["from pathlib import Path", "import os"]
           add_validation: true
           validation_template: |
-            safe_path = (Path(SAFE_ROOT) / user_input).resolve()
-            if not safe_path.is_relative_to(SAFE_ROOT):
+            safe_root = Path(SAFE_ROOT).resolve()
+            safe_path = (safe_root / user_input).resolve()
+            # Compatible with Python 3.6+
+            if not str(safe_path).startswith(str(safe_root)):
               raise ValueError('Access denied')
     
     # Alert #53: 調試模式修復
@@ -246,12 +248,14 @@ fix:
       enabled: true
       strategy: "replace_or_sanitize"
       patterns:
-        - from: "eval("
+        - from: "eval\\s*\\("
           to: "# SECURITY: eval() removed - use safe alternatives"
           action: "comment_and_remove"
-        - from: "exec("
+          regex: true
+        - from: "exec\\s*\\("
           to: "# SECURITY: exec() removed - use safe alternatives"
           action: "comment_and_remove"
+          regex: true
   
   # 測試驗證
   verify_with_tests: true
@@ -867,5 +871,9 @@ validation:
   quality_assurance:
     peer_reviewed: true
     security_reviewed: true
-    tested_in_staging: false  # 需要在暫存環境測試
-    production_ready: false   # 需要進一步驗證後才能生產使用
+    tested_in_staging: false  # TODO: 需要在暫存環境測試新的自動修復策略
+    production_ready: false   # TODO: 在生產環境啟用前需驗證：
+                              # 1. 測試所有自動修復模板的正確性
+                              # 2. 驗證多語言支援的完整性
+                              # 3. 確認不會產生誤報或錯誤修復
+                              # 4. 在暫存環境運行完整測試套件
