@@ -1,8 +1,11 @@
 import { createHash, randomUUID } from 'crypto';
 import { readFile, stat } from 'fs/promises';
-import { relative } from 'path';
+import { relative, resolve } from 'path';
 
 import { SLSAAttestationService, SLSAProvenance, BuildMetadata } from './attestation';
+
+// Define safe root directory for file operations to prevent path traversal attacks
+const SAFE_ROOT = resolve(process.cwd());
 
 export interface BuildAttestation {
   id: string;
@@ -68,11 +71,37 @@ export class ProvenanceService {
   constructor() {
     this.slsaService = new SLSAAttestationService();
   }
+
+  /**
+   * Validate that a file path is safe to access
+   * to prevent directory traversal attacks
+   */
+  private validatePath(filePath: string): string {
+    const resolvedPath = resolve(filePath);
+
+    // For relative paths, ensure they resolve within the safe root
+    // For absolute paths, allow them but still check for traversal patterns
+    const normalizedInput = filePath.replace(/\\/g, '/');
+
+    // Check for path traversal patterns that try to escape directories
+    if (normalizedInput.includes('../') || normalizedInput.includes('..\\')) {
+      // If the path contains .. but resolves within safe root, it's okay
+      if (!resolvedPath.startsWith(SAFE_ROOT)) {
+        throw new Error(
+          `Path traversal detected: ${filePath} attempts to access files outside the safe directory`
+        );
+      }
+    }
+
+    return resolvedPath;
+  }
+
   /**
    * 生成文件的 SHA256 摘要
    */
   async generateFileDigest(filePath: string): Promise<string> {
-    const content = await readFile(filePath);
+    const validatedPath = this.validatePath(filePath);
+    const content = await readFile(validatedPath);
     const hash = createHash('sha256');
     hash.update(content);
     return `sha256:${hash.digest('hex')}`;
@@ -86,14 +115,17 @@ export class ProvenanceService {
     builder: BuilderInfo,
     metadata: Partial<MetadataInfo> = {}
   ): Promise<BuildAttestation> {
-    const stats = await stat(subjectPath);
+    // Validate path to prevent directory traversal attacks
+    const validatedPath = this.validatePath(subjectPath);
+
+    const stats = await stat(validatedPath);
     if (!stats.isFile()) {
       throw new Error(`Subject path must be a file: ${subjectPath}`);
     }
 
-    const content = await readFile(subjectPath);
+    const content = await readFile(validatedPath);
     const subject = this.slsaService.createSubjectFromContent(
-      relative(process.cwd(), subjectPath),
+      relative(process.cwd(), validatedPath),
       content
     );
 
@@ -141,7 +173,7 @@ export class ProvenanceService {
       subject: {
         name: subject.name,
         digest: `sha256:${subject.digest.sha256}`,
-        path: subjectPath,
+        path: validatedPath,
       },
       predicate: {
         type: slsaProvenance.predicateType,
