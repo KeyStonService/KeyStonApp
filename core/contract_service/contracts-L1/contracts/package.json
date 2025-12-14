@@ -13,9 +13,11 @@
     "lint:fix": "eslint src/**/*.ts --fix --ignore-pattern \"**/*.test.ts\" --ignore-pattern \"**/__tests__/**\"",
     "test": "jest --passWithNoTests",
     "test:watch": "jest --watch --passWithNoTests",
+    "test:self-healing": "jest --testPathPattern=self-healing --passWithNoTests",
     "typecheck": "tsc --noEmit",
     "sbom": "npm audit --audit-level moderate --json > sbom.json",
     "scan": "npm audit --audit-level high",
+    "governance:self-healing-report": "node -e \"const g = require('./dist/governance/self-healing-integration'); console.log(g.selfHealingGovernance.exportGovernanceReport());\" || echo 'Build dist first with: npm run build'",
     "predeploy": "npm run typecheck && npm run lint && npm run test && npm run build",
     "clean": "rimraf dist"
   },
@@ -42,7 +44,8 @@
     "ioredis": "^5.8.2",
     "rate-limit-redis": "^4.3.1",
     "uuid": "^9.0.1",
-    "zod": "^3.25.76"
+    "zod": "^3.25.76",
+    "sanitize-filename": "^1.6.3"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",
