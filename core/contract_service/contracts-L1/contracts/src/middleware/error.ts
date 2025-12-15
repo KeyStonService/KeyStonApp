@@ -31,8 +31,8 @@ class ErrorSanitizationPatterns {
 
   /**
    * Patterns that indicate sensitive information that should be removed.
-   * These patterns use the global flag (g) for efficiency, but are safe to reuse
-   * because String.prototype.replace() resets the lastIndex property after each call.
+   * These patterns use the global flag (g) for efficiency with String.prototype.replace(),
+   * which creates a new regex iteration context for each call, making them safe to reuse.
    */
   static readonly SENSITIVE_PATTERNS: ReadonlyArray<RegExp> = Object.freeze([
     /at\s+[^\n:]+:\d+(?::\d+)?/gi, // Stack trace locations (at file.ts:10:5 or at file.ts:10)
