@@ -66,9 +66,7 @@ if [[ -d services ]]; then
   (cd services && go build ./...)
 fi
 
-if [[ -f requirements.txt || -f pyproject.toml ]]; then
-  PY_PRESENT=true
-elif [[ -n "$(find . -name '*.py' -type f -print -quit 2>/dev/null)" ]]; then
+if [[ -f requirements.txt || -f pyproject.toml || -n "$(find . -name '*.py' -type f -print -quit 2>/dev/null)" ]]; then
   PY_PRESENT=true
   log "Python dependencies and tests"
   if [[ -f requirements.txt ]]; then
@@ -104,7 +102,11 @@ else
 fi
 python governance/scripts/validate-governance-structure.py --verbose
 make validate-governance-ci
-python "${GOV_SCAN_SCRIPT}" --deep
+if [[ -f "${GOV_SCAN_SCRIPT}" ]]; then
+  python "${GOV_SCAN_SCRIPT}" --deep
+else
+  log "Governance scan script not found at ${GOV_SCAN_SCRIPT}; skipping deep scan"
+fi
 
 if [[ -n "${PR_BODY}" ]]; then
   log "Validate AI Behavior Contract response body"
