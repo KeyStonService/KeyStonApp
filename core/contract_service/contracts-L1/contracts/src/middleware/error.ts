@@ -28,14 +28,12 @@ const SAFE_ERROR_PATTERNS = [
  * Patterns that indicate sensitive information that should be removed
  */
 const SENSITIVE_PATTERNS = [
-  /at\s+[\w./\\]+:\d+:\d+/gi, // Stack trace locations (at file.ts:10:5)
-  /\/[\w\-./]+\.(?:js|ts|py|java|go|rb)/gi, // File paths
-  /\\[\w\-.\\]+\.(?:js|ts|py|java|go|rb)/gi, // Windows file paths
+  /at\s+[^\n:]+:\d+:\d+/gi, // Stack trace locations (at file.ts:10:5)
+  /\/[\w\-./]+\.(?:js|ts|py|java|go|rb|json|yaml|yml|env|config)/gi, // Unix file paths
+  /\\[\w\-.]+\.(?:js|ts|py|java|go|rb|json|yaml|yml|env|config)/gi, // Windows file paths
+  /\/(?:etc|proc|var|usr|home)\/[^\s]*/gi, // System paths
   /Error:\s+[\w\s]+\n\s+at/gi, // Stack trace beginnings
-  /mongodb:\/\/[^\s]+/gi, // MongoDB connection strings
-  /postgres:\/\/[^\s]+/gi, // PostgreSQL connection strings
-  /mysql:\/\/[^\s]+/gi, // MySQL connection strings
-  /redis:\/\/[^\s]+/gi, // Redis connection strings
+  /\w+:\/\/[^\s]+/gi, // Generic connection strings (mongodb://, postgres://, etc.)
   /password[=:]\s*\S+/gi, // Password parameters
   /token[=:]\s*\S+/gi, // Token parameters
   /api[_-]?key[=:]\s*\S+/gi, // API key parameters
@@ -64,8 +62,8 @@ function sanitizeErrorMessage(message: string): string {
     sanitized = sanitized.replace(pattern, '[REDACTED]');
   }
 
-  // If message was heavily redacted or contains redacted content, use generic message
-  if (sanitized.includes('[REDACTED]') || sanitized.length < 5) {
+  // If message was redacted or is too short after redaction, use generic message
+  if (sanitized.includes('[REDACTED]')) {
     return 'Internal server error';
   }
 
