@@ -1,5 +1,5 @@
 import { ProvenanceService } from '../services/provenance';
-import { writeFile, unlink, mkdir } from 'fs/promises';
+import { writeFile, unlink, mkdir, rmdir } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
 
@@ -119,7 +119,7 @@ describe('ProvenanceService', () => {
       } finally {
         // Clean up
         try {
-          await unlink(testDir);
+          await rmdir(testDir);
         } catch {
           // Directory might not exist or can't be removed
         }
