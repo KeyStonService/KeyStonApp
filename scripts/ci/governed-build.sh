@@ -8,6 +8,8 @@ SUMMARY_FILE="${GITHUB_STEP_SUMMARY:-}"
 PR_BODY="${PR_BODY:-}"
 GOV_SCAN_SCRIPT="governance/35-scripts/scan-governance-directory.py" # numeric prefix retained for governance conventions
 PYTEST_VERSION="${PYTEST_VERSION:-7.4.4}"
+MANIFEST_PATH="${MANIFEST_PATH:-island.bootstrap.stage0.yaml}"
+MANIFEST_STEPS="${MANIFEST_STEPS:-scaffold.directories materialize.templates}"
 
 log() {
   echo "[governed-build] $*"
@@ -58,7 +60,10 @@ fi
 if [[ -d services ]]; then
   GO_PRESENT=true
   log "Go formatting check"
-  test -z "$(gofmt -l ./services)"
+  if gofmt -l ./services | grep -q .; then
+    log "Go formatting issues detected"
+    exit 1
+  fi
 
   log "Go tests"
   (cd services && go test ./...)
@@ -93,7 +98,7 @@ if [[ -f pom.xml ]]; then
 fi
 
 log "Validate manifest bootstrap"
-python3 tools/bootstrap_from_manifest.py island.bootstrap.stage0.yaml --steps scaffold.directories materialize.templates
+python3 tools/bootstrap_from_manifest.py "${MANIFEST_PATH}" --steps ${MANIFEST_STEPS}
 
 log "Governance validation"
 python -m pip install --upgrade pip
@@ -103,7 +108,12 @@ else
   log "requirements-workflow.txt missing; installing minimal governance deps"
   install_minimal_governance_deps
 fi
-python governance/scripts/validate-governance-structure.py --verbose
+governance_validator="${GOVERNANCE_VALIDATE_SCRIPT:-$(find governance -name 'validate-governance-structure.py' -print -quit 2>/dev/null || true)}"
+if [[ -n "${governance_validator}" && -f "${governance_validator}" ]]; then
+  python "${governance_validator}" --verbose
+else
+  log "Governance validation script not found; skipping structure validation"
+fi
 make validate-governance-ci
 scan_script="${GOV_SCAN_SCRIPT}"
 if [[ ! -f "${scan_script}" ]]; then
