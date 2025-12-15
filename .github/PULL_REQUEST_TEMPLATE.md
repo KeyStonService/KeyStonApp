@@ -62,8 +62,8 @@
 
 <!-- If this PR has security implications, please describe them here -->
 
-- [x] This PR does not introduce any security vulnerabilities
-- [x] Security implications have been reviewed and addressed
+- [ ] This PR does not introduce any security vulnerabilities
+- [ ] Security implications have been reviewed and addressed
 
 ## Deployment Notes
 
