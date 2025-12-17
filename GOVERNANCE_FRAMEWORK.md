@@ -16,17 +16,20 @@ MachineNativeOps 治理框架是一个**机器可读、自动化就绪**的组�
 
 ## 📁 仓库结构
 
+> **注**: 治理框架作为**治理层**整合到现有的大型 repo 中，与现有的产品/平台代码和平共存。
+
 ```bash
 MachineNativeOps/
 ├── governance-manifest.yaml        # 治理总纲 (机器 + 人类入口)
-├── schemas/                        # 机器可验证的 schema 定义
+├── schemas/                        # 机器可验证的 schema 定义 (NEW)
 │   ├── naming-policy.schema.yaml
 │   ├── resource-name.schema.yaml
 │   ├── change-request.schema.yaml
 │   ├── exception-request.schema.yaml
 │   ├── metric-definition.schema.yaml
-│   └── review-meeting.schema.yaml
-├── policies/                       # 实际命名与治理规则
+│   ├── review-meeting.schema.yaml
+│   └── audit-report.schema.yaml
+├── policies/                       # 实际命名与治理规则 (NEW)
 │   ├── naming/
 │   │   ├── k8s-deployment-naming.yaml
 │   │   ├── api-naming.yaml
@@ -37,42 +40,70 @@ MachineNativeOps/
 │   │   └── exception-policy.yaml
 │   └── security/
 │       └── info-security-policy-reference.yaml
-├── templates/                      # 样板（CI、表单等）
-│   ├── forms/
-│   │   ├── change-request.template.yaml
-│   │   ├── exception-request.template.yaml
-│   │   └── audit-report.template.yaml
-│   ├── ci/
-│   │   ├── github-actions-naming-check.yml
-│   │   ├── gitlab-ci-naming-check.yml
-│   │   └── jenkins-naming-check.groovy
-│   └── k8s/
-│       ├── deployment.template.yaml
-│       └── prometheus-rule-naming-alert.template.yaml
-├── tools/                          # 实作脚本、CLI
-│   ├── bash/
-│   │   └── generate_resource_name.sh
-│   └── python/
-│       └── validate_naming.py
-├── examples/                       # 教学 & 情境案例
-│   └── governance/
+├── references/                     # 外部参考资料索引 (NEW)
+│   └── references.yaml
+│
+├── templates/                      # 现有模板目录
+│   ├── ... (原有模板)
+│   └── governance/                 # 治理专用模板 (NEW)
+│       ├── forms/
+│       │   ├── change-request.template.yaml
+│       │   ├── exception-request.template.yaml
+│       │   └── audit-report.template.yaml
+│       ├── ci/
+│       │   ├── github-actions-naming-check.yml
+│       │   └── gitlab-ci-naming-check.yml
+│       └── k8s/
+│           ├── deployment.template.yaml
+│           └── prometheus-rule-naming-alert.template.yaml
+│
+├── tools/                          # 现有工具目录
+│   ├── ... (原有工具)
+│   └── governance/                 # 治理专用工具 (NEW)
+│       ├── bash/
+│       │   └── generate_resource_name.sh
+│       ├── python/
+│       │   └── validate_naming.py
+│       └── node/
+│           └── naming-bot.js
+│
+├── examples/                       # 现有示例目录
+│   ├── ... (原有示例)
+│   └── governance/                 # 治理案例示例 (NEW)
 │       ├── naming/
+│       │   └── good-vs-bad-naming.yaml
 │       ├── change-management/
-│       └── exception/
-├── docs/governance/                # 人类可读文档
-│   ├── README.md
-│   ├── 02-org-adoption-lifecycle.md
-│   ├── 03-role-based-training.md
-│   ├── 04-naming-standards.md
-│   ├── 05-change-management.md
-│   ├── 06-metrics-and-audit.md
-│   ├── 07-exception-handling.md
-│   ├── 08-observability-validation.md
-│   ├── 09-security-compliance.md
-│   └── 10-cross-team-governance.md
-└── references/                     # 外部连结索引
-    └── references.yaml
+│       │   └── CHG-2025-001.yaml
+│       ├── exception/
+│       ├── metrics/
+│       └── training/
+│
+├── docs/                           # 现有文档目录
+│   ├── ... (原有文档)
+│   └── governance/                 # 治理文档 (NEW)
+│       ├── README.md
+│       ├── 02-org-adoption-lifecycle.md
+│       ├── 03-role-based-training.md
+│       ├── 04-naming-standards.md
+│       ├── 05-change-management.md
+│       ├── 06-metrics-and-audit.md
+│       ├── 07-exception-handling.md
+│       ├── 08-observability-validation.md
+│       ├── 09-security-compliance.md
+│       └── 10-cross-team-governance.md
+│
+├── governance/                     # 现有治理目录 (保留)
+│   └── ... (23维度治理矩阵、vision-strategy 等)
+│
+└── ... (其他现有目录: agent, ai, apps, automation, autonomous,
+         bridges, client, config, contracts, core, deploy, deployment,
+         infra, infrastructure, ops, services, etc.)
 ```
+
+**说明**:
+- 标注 `(NEW)` 的是新增的治理层组件
+- 其他现有目录保持不变，作为被治理的对象
+- 治理框架与现有代码和平共存，互不干扰
 
 ## 🚀 快速开始
 
@@ -89,7 +120,7 @@ cat governance-manifest.yaml
 
 ```bash
 # 使用命名生成工具
-./tools/bash/generate_resource_name.sh \
+./tools/governance/bash/generate_resource_name.sh \
   --environment prod \
   --app payment \
   --resource-type deploy \
@@ -102,7 +133,7 @@ cat governance-manifest.yaml
 
 ```python
 # 使用 Python 验证器
-python tools/python/validate_naming.py \
+python tools/governance/python/validate_naming.py \
   --files deployment.yaml \
   --policies policies/naming/ \
   --schemas schemas/ \
@@ -180,8 +211,8 @@ git push origin feature/change-request
 **工具**:
 - Schema: `schemas/resource-name.schema.yaml`
 - 策略: `policies/naming/k8s-deployment-naming.yaml`
-- 生成器: `tools/bash/generate_resource_name.sh`
-- 验证器: `tools/python/validate_naming.py`
+- 生成器: `tools/governance/bash/generate_resource_name.sh`
+- 验证器: `tools/governance/python/validate_naming.py`
 
 ### 2️⃣ 变更管理 (Change Management)
 
@@ -252,29 +283,29 @@ Draft → Under Review → Approved → Active → (Remediated | Expired | Revok
 
 ```bash
 # Bash 生成器
-./tools/bash/generate_resource_name.sh --help
+./tools/governance/bash/generate_resource_name.sh --help
 
 # Python 验证器
-python tools/python/validate_naming.py --help
+python tools/governance/python/validate_naming.py --help
 ```
 
 ### CI/CD 模板
 
-- **GitHub Actions**: `templates/ci/github-actions-naming-check.yml`
-- **GitLab CI**: `templates/ci/gitlab-ci-naming-check.yml`
-- **Jenkins**: `templates/ci/jenkins-naming-check.groovy`
+- **GitHub Actions**: `templates/governance/ci/github-actions-naming-check.yml`
+- **GitLab CI**: `templates/governance/ci/gitlab-ci-naming-check.yml`
+- **Jenkins**: `templates/governance/ci/jenkins-naming-check.groovy`
 
 ### Kubernetes 集成
 
-- **Deployment 模板**: `templates/k8s/deployment.template.yaml`
-- **Prometheus 规则**: `templates/k8s/prometheus-rule-naming-alert.template.yaml`
+- **Deployment 模板**: `templates/governance/k8s/deployment.template.yaml`
+- **Prometheus 规则**: `templates/governance/k8s/prometheus-rule-naming-alert.template.yaml`
 - **OPA Gatekeeper**: 策略即代码
 
 ### 表单模板
 
-- **变更请求**: `templates/forms/change-request.template.yaml`
-- **例外申请**: `templates/forms/exception-request.template.yaml`
-- **审计报告**: `templates/forms/audit-report.template.yaml`
+- **变更请求**: `templates/governance/forms/change-request.template.yaml`
+- **例外申请**: `templates/governance/forms/exception-request.template.yaml`
+- **审计报告**: `templates/governance/forms/audit-report.template.yaml`
 
 ## 📖 文档
 

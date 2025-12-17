@@ -54,12 +54,12 @@ spec:
         - "policies/naming/api-naming.yaml"
         - "policies/naming/pipeline-naming.yaml"
       tools:
-        - "tools/bash/generate_resource_name.sh"
-        - "tools/python/validate_naming.py"
+        - "tools/governance/bash/generate_resource_name.sh"
+        - "tools/governance/python/validate_naming.py"
       templates:
-        - "templates/k8s/deployment.template.yaml"
-        - "templates/ci/github-actions-naming-check.yml"
-        - "templates/ci/gitlab-ci-naming-check.yml"
+        - "templates/governance/k8s/deployment.template.yaml"
+        - "templates/governance/ci/github-actions-naming-check.yml"
+        - "templates/governance/ci/gitlab-ci-naming-check.yml"
       examples:
         - "examples/governance/naming/good-vs-bad-naming.yaml"
         - "examples/governance/naming/sample-k8s-deployment.yaml"
@@ -78,7 +78,7 @@ spec:
       policies:
         - "policies/change-management/change-policy.yaml"
       templates:
-        - "templates/forms/change-request.template.yaml"
+        - "templates/governance/forms/change-request.template.yaml"
       examples:
         - "examples/governance/change-management/CHG-2025-001.yaml"
         - "examples/governance/change-management/rollback-scenario.md"
@@ -96,7 +96,7 @@ spec:
         - "schemas/metric-definition.schema.yaml"
         - "schemas/audit-report.schema.yaml"
       templates:
-        - "templates/forms/audit-report.template.yaml"
+        - "templates/governance/forms/audit-report.template.yaml"
       examples:
         - "examples/governance/metrics/kpi-dashboard.yaml"
       tags: ["metrics", "audit", "kpi"]
@@ -114,7 +114,7 @@ spec:
       policies:
         - "policies/exception/exception-policy.yaml"
       templates:
-        - "templates/forms/exception-request.template.yaml"
+        - "templates/governance/forms/exception-request.template.yaml"
       examples:
         - "examples/governance/exception/EXC-2025-001.yaml"
       tags: ["exception", "compliance", "approval"]
@@ -128,8 +128,8 @@ spec:
       status: "stable"
       version: "1.0.0"
       templates:
-        - "templates/k8s/prometheus-rule-naming-alert.template.yaml"
-        - "templates/monitoring/grafana-dashboard-governance.json"
+        - "templates/governance/k8s/prometheus-rule-naming-alert.template.yaml"
+        - "templates/governance/monitoring/grafana-dashboard-governance.json"
       examples:
         - "examples/governance/observability/prometheus-rules.yaml"
       tags: ["observability", "prometheus", "grafana"]
@@ -187,26 +187,26 @@ spec:
   automation:
     cicd:
       github-actions:
-        - "templates/ci/github-actions-naming-check.yml"
+        - "templates/governance/ci/github-actions-naming-check.yml"
       gitlab-ci:
-        - "templates/ci/gitlab-ci-naming-check.yml"
+        - "templates/governance/ci/gitlab-ci-naming-check.yml"
       jenkins:
-        - "templates/ci/jenkins-naming-check.groovy"
+        - "templates/governance/ci/jenkins-naming-check.groovy"
 
     validation:
       tools:
         - name: "naming-validator"
-          path: "tools/python/validate_naming.py"
+          path: "tools/governance/python/validate_naming.py"
           type: "python"
           description: "验证资源命名是否符合规范"
         - name: "resource-name-generator"
-          path: "tools/bash/generate_resource_name.sh"
+          path: "tools/governance/bash/generate_resource_name.sh"
           type: "bash"
           description: "根据规则生成标准化资源名称"
 
     bots:
       naming-bot:
-        path: "tools/node/naming-bot.js"
+        path: "tools/governance/node/naming-bot.js"
         type: "nodejs"
         description: "GitHub/GitLab PR自动命名检查机器人"
 
