@@ -64,6 +64,7 @@ platform that integrates three core subsystems:
 
 ## 🗺️ Technical Roadmap
 
+Phases 1–3 (core foundation, intelligent automation, distribution) are completed; the roadmap below shows the extension from Phase 4 onward.
 Phases 4 → 6 are a single continuum: Phase 4 productionized the stack; Phase 5 hardens it for enterprise use (multi-tenancy/HA/IAM/cost/SLA); Phase 6 layers ecosystem expansion on top of the Phase 5 baselines (marketplace, third-party integrations, SaaS, training, community).
 
 ### ✅ Phase 4: Productionization & Scale (instant, unscheduled)
