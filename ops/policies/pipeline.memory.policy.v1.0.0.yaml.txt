@@ -6,7 +6,7 @@ metadata:
   annotations:
     description: "Memory governance policy for AXIOM SSOT pipeline under 48GiB total RAM."
     created_by: "KuboBot-v8"
-    timestamp: "2025-10-09T00:00:00Z"
+    timestamp: "2025-12-19T00:00:00Z"
 immutable: true
 retention: keep-forever
 
@@ -14,7 +14,7 @@ policy_identity:
   expected_path: "ops/policies/pipeline.memory.policy.v1.0.0.yaml.txt"
   ssot_binding: true
   integrity_placeholders:
-    sha3_512: "<TO_BE_FILLED_BY_PIPELINE>"   # 統一占位符
+    sha3_512: "<TO_BE_FILLED_BY_PIPELINE>"   # unified placeholder
     blake3: "<TO_BE_FILLED_BY_PIPELINE>"
 
 spec:
@@ -105,7 +105,7 @@ spec:
   allocation_policy:
     gate_memory_floor_gib: 0.75
     gate_memory_ceiling_gib: 2.0
-    burst_allowance_gib: 3.0
+    burst_allowance_gib: 1.0
     recycle_interval_sec: 30
     oversubscription_guard: true
     emergency_kill_threshold_percent: 98
@@ -142,7 +142,7 @@ spec:
       max_sec: 60
       factor: 2.0
       jitter: true
-    on_batch_failure: "rollback-last-hashlock"   # 依據 A/B/C 鎖檔回滾
+    on_batch_failure: "rollback-last-hashlock"   # rollback according to A/B/C hashlock files
     unknown_gate_action: "queue"
     verify_required_artifacts: true
     dry_run_on_first_use: true
