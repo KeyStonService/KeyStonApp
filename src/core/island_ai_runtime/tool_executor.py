@@ -114,7 +114,7 @@ class CodeRunner(Tool):
         allowed_cmds = {cfg["cmd"] for cfg in self.SUPPORTED_LANGUAGES.values()}
         base_cmd = lang_config.get("cmd")
         if base_cmd not in allowed_cmds:
-            raise ValueError("Unsupported language command")
+            raise ValueError(f"Unsupported language command: {base_cmd}")
         return [base_cmd, temp_file]
 
     async def execute(self, request: ExecutionRequest) -> ExecutionResult:

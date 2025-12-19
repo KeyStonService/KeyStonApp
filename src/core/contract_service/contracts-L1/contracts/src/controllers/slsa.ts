@@ -44,6 +44,10 @@ export class SLSAController {
   }
 
   private resolveSubjectPath(subjectPath: string): { normalized: string; resolved: string } {
+    if (path.isAbsolute(subjectPath)) {
+      throw new PathValidationError();
+    }
+
     const normalizedSubjectPath = path.normalize(subjectPath);
     if (path.isAbsolute(normalizedSubjectPath)) {
       throw new PathValidationError();
