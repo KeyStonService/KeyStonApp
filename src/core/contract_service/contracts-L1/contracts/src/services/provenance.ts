@@ -43,12 +43,12 @@ const assertPathValid = (filePath: string): void => {
     return;
   }
 
-  // For multi-component paths, forbid traversal segments and duplicate separators.
+  // For multi-component paths, perform basic syntactic validation and forbid traversal segments and duplicate separators.
   const segments = filePath.split(/[\\/]+/);
   if (segments.includes('..') || filePath.includes('//') || filePath.includes('\\\\')) {
-  // Basic syntactic validation on the raw user input.
     throw new PathValidationError('Invalid file path');
   }
+};
 };
 
 async function resolveSafePath(userInputPath: string): Promise<string> {
