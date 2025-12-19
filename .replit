@@ -39,12 +39,12 @@ waitForPort = 5000
 name = "AI Chat"
 author = "agent"
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "uv run python chat_app.py"
-
 [workflows.workflow.metadata]
 outputType = "console"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "uv run python code_assistant.py"
 
 [[ports]]
 localPort = 5000
