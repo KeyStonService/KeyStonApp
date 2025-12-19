@@ -202,9 +202,16 @@ lineage:
 
 ### DAR-First 知識庫架構 🆕
 
-99-元數據採用 **DAR-First** (Decision, Action, Reasoning) 架構，將知識庫從「資產中心」重新定位為「治理中心」。
+99-元數據採用 **DAR-First** (Decision, Action, Reasoning) 架構，將知識庫從「資產中心」重新定位為「治理中心」，並完整整合**活體知識庫（Living Knowledge Base）**的四層架構。
 
-詳細架構文檔請參閱：[DAR_FIRST_ARCHITECTURE.md](./DAR_FIRST_ARCHITECTURE.md)
+**核心特色：紀錄功能** 📝
+- 倉庫一有變動，立刻偵測並同步更新知識圖譜
+- 自動找到此次變動的相關內容和高度相關內容
+- 完整記錄每次變動，包含影響分析和依賴追蹤
+
+詳細架構文檔請參閱：
+- [DAR_FIRST_ARCHITECTURE.md](./DAR_FIRST_ARCHITECTURE.md) - DAR-First 完整架構
+- [knl-pack/LIVING_KNOWLEDGE_INTEGRATION.md](./knl-pack/LIVING_KNOWLEDGE_INTEGRATION.md) - 活體知識庫整合說明
 
 ```
 src/governance/dimensions/99-metadata/
