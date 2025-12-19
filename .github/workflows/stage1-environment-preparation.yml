@@ -15,6 +15,9 @@ on:
   push:
     branches: [main, develop]
 
+permissions:
+  contents: read
+
 env:
   PLATFORM_VERSION: "v1.0.0"
   DEPLOYER_SCRIPT: "scripts/deployment/comprehensive-deploy.sh"
