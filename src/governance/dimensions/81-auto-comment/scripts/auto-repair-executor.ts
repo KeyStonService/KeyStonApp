@@ -21,7 +21,6 @@ import {
   DiagnosisReport,
   DiagnosedError,
   FixStep,
-  AutoFixPlan,
 } from "./ci-diagnosis-engine";
 import { parseCommandSegments } from "./safe-commands";
 
