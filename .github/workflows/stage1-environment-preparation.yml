@@ -21,7 +21,6 @@ permissions:
 env:
   PLATFORM_VERSION: "v1.0.0"
   DEPLOYER_SCRIPT: "scripts/deployment/comprehensive-deploy.sh"
-  VALIDATION_TIMEOUT: 600 # seconds
   VALIDATION_DIRS: "config src docs scripts tools"
   CONFIG_VALIDATION_FILES: "config/dependencies.yaml config/unified-config-index.yaml config/brand-mapping.yaml"
 
@@ -185,6 +184,28 @@ jobs:
       - name: 检出代码
         uses: actions/checkout@v4
 
+      - name: 收集配置目录
+        id: collect-dirs
+        run: |
+          set -euo pipefail
+          echo "收集用于配置验证的目录..."
+          CANDIDATE_DIRS=($VALIDATION_DIRS)
+          EXISTING_DIRS=()
+          for d in "${CANDIDATE_DIRS[@]}"; do
+            if [ -d "$d" ]; then
+              EXISTING_DIRS+=("$d")
+            fi
+          done
+          if [ ${#EXISTING_DIRS[@]} -eq 0 ]; then
+            echo "dirs=" >> "$GITHUB_OUTPUT"
+            echo "ℹ️ 未找到可用的校验目录"
+          else
+            printf -v joined ' %s' "${EXISTING_DIRS[@]}"
+            joined=${joined:1}
+            echo "dirs=$joined" >> "$GITHUB_OUTPUT"
+            echo "将验证以下目录: $joined"
+          fi
+
       - name: YAML配置语法检查
         env:
           VALIDATION_DIRS_RESOLVED: ${{ steps.collect-dirs.outputs.dirs }}
@@ -246,13 +267,19 @@ jobs:
           set -euo pipefail
           echo "验证环境特定配置..."
           read -r -a CONFIG_FILES <<< "${CONFIG_VALIDATION_FILES}"
+          missing_required=0
           for config in "${CONFIG_FILES[@]}"; do
             if [ -f "$config" ]; then
               echo "✅ 找到配置文件: $config"
             else
-              echo "⚠️ 配置文件缺失: $config"
+              echo "❌ 配置文件缺失: $config"
+              missing_required=1
             fi
           done
+          if [ "$missing_required" -ne 0 ]; then
+            echo "❌ 部分必需的环境配置文件缺失，环境配置验证失败"
+            exit 1
+          fi
 
   # =============================================================================
   # 最终环境验证报告
@@ -286,10 +313,8 @@ jobs:
              [ "${{ needs.script-validation.result }}" = "success" ] && \
              [ "${{ needs.config-validation.result }}" = "success" ]; then
             echo "🎉 环境验证全部通过" | tee -a "$REPORT_FILE"
-            echo "report-status=success" >> $GITHUB_OUTPUT
           else
             echo "❌ 环境验证失败" | tee -a "$REPORT_FILE"
-            echo "report-status=failure" >> $GITHUB_OUTPUT
           fi
 
       - name: 上传验证报告
