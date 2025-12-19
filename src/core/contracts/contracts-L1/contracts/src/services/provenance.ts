@@ -44,6 +44,16 @@ async function resolveSafePath(userInputPath: string): Promise<string> {
     ? path.resolve(safeRoot, relativeToRoot)
     : path.resolve(safeRoot, normalizedInput);
 
+  // Ensure the resolved candidate path is within the configured safe root
+  const relFromSafeRoot = path.relative(safeRoot, resolvedCandidate);
+  if (
+    relFromSafeRoot.startsWith('..') ||
+    path.isAbsolute(relFromSafeRoot) ||
+    relFromSafeRoot === ''
+  ) {
+    throw new PathValidationError('Invalid file path');
+  }
+
   let canonicalSafeRoot: string;
   try {
     canonicalSafeRoot = await realpath(safeRoot);
