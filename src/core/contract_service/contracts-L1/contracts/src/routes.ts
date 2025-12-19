@@ -4,12 +4,14 @@ import { AssignmentController } from './controllers/assignment';
 import { EscalationController } from './controllers/escalation';
 import { ProvenanceController } from './controllers/provenance';
 import { SLSAController } from './controllers/slsa';
+import { createRateLimiter, rateLimitPresets } from './middleware/rate-limit';
 
 const router: RouterType = Router();
 const provenanceController = new ProvenanceController();
 const slsaController = new SLSAController();
 const assignmentController = new AssignmentController();
 const escalationController = new EscalationController();
+const slsaRateLimiter = createRateLimiter(rateLimitPresets.strict);
 
 // 健康檢查端點
 router.get('/healthz', (_req: Request, res: Response) => {
@@ -56,11 +58,11 @@ router.get('/api/v1/provenance/digest/:filePath(*)', provenanceController.getFil
 router.get('/api/v1/provenance/export/:id', provenanceController.exportAttestation);
 
 // SLSA 認證端點
-router.post('/api/v1/slsa/attestations', slsaController.createAttestation);
-router.post('/api/v1/slsa/verify', slsaController.verifyAttestation);
-router.post('/api/v1/slsa/digest', slsaController.generateDigest);
-router.post('/api/v1/slsa/contracts', slsaController.createContractAttestation);
-router.post('/api/v1/slsa/summary', slsaController.getAttestationSummary);
+router.post('/api/v1/slsa/attestations', slsaRateLimiter, slsaController.createAttestation);
+router.post('/api/v1/slsa/verify', slsaRateLimiter, slsaController.verifyAttestation);
+router.post('/api/v1/slsa/digest', slsaRateLimiter, slsaController.generateDigest);
+router.post('/api/v1/slsa/contracts', slsaRateLimiter, slsaController.createContractAttestation);
+router.post('/api/v1/slsa/summary', slsaRateLimiter, slsaController.getAttestationSummary);
 
 // 自動分派端點 (Auto-Assignment Endpoints)
 router.post('/api/v1/assignment/assign', assignmentController.assignResponsibility);
