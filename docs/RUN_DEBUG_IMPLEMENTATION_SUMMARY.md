@@ -88,6 +88,7 @@ await engine.step_over(session_id)
 - ✅ 附加模式
 
 **技術特點**:
+
 - 使用 asyncio 進行非同步通訊
 - 實作完整的 DAP 訊息協議
 - 支援所有標準偵錯操作
