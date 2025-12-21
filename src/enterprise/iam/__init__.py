@@ -10,7 +10,7 @@ This module provides multi-tenant identity management with:
 All data must carry org_id as the tenant isolation root key.
 """
 
-from src.enterprise.iam.models import (
+from enterprise.iam.models import (
     Organization,
     Project,
     Repository,
@@ -24,10 +24,10 @@ from src.enterprise.iam.models import (
     OIDCProvider,
 )
 
-from src.enterprise.iam.tenant_manager import TenantManager
-from src.enterprise.iam.rbac import RBACManager
-from src.enterprise.iam.token_manager import TokenManager
-from src.enterprise.iam.sso import SSOManager
+from enterprise.iam.tenant_manager import TenantManager
+from enterprise.iam.rbac import RBACManager
+from enterprise.iam.token_manager import TokenManager
+from enterprise.iam.sso import SSOManager
 
 __all__ = [
     # Models

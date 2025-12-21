@@ -15,7 +15,7 @@ import secrets
 import logging
 from urllib.parse import urlencode, urlparse
 
-from src.enterprise.iam.models import (
+from enterprise.iam.models import (
     User,
     SSOConfig,
     OIDCProvider,

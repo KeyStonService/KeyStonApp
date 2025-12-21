@@ -128,7 +128,7 @@ include-package-data = true
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["core", "core.*", "automation", "automation.*", "ai", "ai.*", "governance", "governance.*"]
+include = ["core", "core.*", "automation", "automation.*", "ai", "ai.*", "governance", "governance.*", "enterprise", "enterprise.*"]
 
 [tool.setuptools.package-data]
 "*" = ["py.typed", "*.yaml", "*.yml", "*.json", "*.txt"]

@@ -9,13 +9,13 @@ This is the critical infrastructure for "strong gate + reporting":
 - State Machine: Run lifecycle tracking (queued → running → completed/failed)
 """
 
-from src.enterprise.events.event_log import (
+from enterprise.events.event_log import (
     EventLog,
     StoredEvent,
     EventFilter,
 )
 
-from src.enterprise.events.job_queue import (
+from enterprise.events.job_queue import (
     JobQueue,
     Job,
     JobPriority,
@@ -23,12 +23,12 @@ from src.enterprise.events.job_queue import (
     DeadLetterQueue,
 )
 
-from src.enterprise.events.idempotency import (
+from enterprise.events.idempotency import (
     IdempotencyManager,
     IdempotencyKey,
 )
 
-from src.enterprise.events.state_machine import (
+from enterprise.events.state_machine import (
     RunStateMachine,
     Run,
     RunState,

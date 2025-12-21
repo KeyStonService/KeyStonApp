@@ -12,7 +12,7 @@ from uuid import UUID
 import re
 import logging
 
-from src.enterprise.iam.models import (
+from enterprise.iam.models import (
     Organization,
     Project,
     Repository,

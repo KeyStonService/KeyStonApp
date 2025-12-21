@@ -9,20 +9,20 @@ Provides stable integration with GitHub/GitLab including:
 - Check Run / Status / Comment write-back
 """
 
-from src.enterprise.integrations.webhook import (
+from enterprise.integrations.webhook import (
     WebhookReceiver,
     WebhookEvent,
     WebhookValidationError,
 )
 
-from src.enterprise.integrations.providers import (
+from enterprise.integrations.providers import (
     GitProviderManager,
     GitProvider,
     ProviderInstallation,
     ProviderAuth,
 )
 
-from src.enterprise.integrations.writeback import (
+from enterprise.integrations.writeback import (
     CheckRunWriter,
     CheckRunStatus,
     CheckRunConclusion,

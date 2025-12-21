@@ -9,13 +9,13 @@ Essential for operations and SLA delivery:
 - Audit Log: Who changed what when (enterprise hard requirement)
 """
 
-from src.enterprise.data.audit import (
+from enterprise.data.audit import (
     AuditLogger,
     AuditEntry,
     AuditAction,
 )
 
-from src.enterprise.data.metrics import (
+from enterprise.data.metrics import (
     MetricsCollector,
     Counter,
     Gauge,
@@ -23,13 +23,13 @@ from src.enterprise.data.metrics import (
     MetricLabels,
 )
 
-from src.enterprise.data.storage import (
+from enterprise.data.storage import (
     ObjectStorage,
     StorageObject,
     StorageLocation,
 )
 
-from src.enterprise.data.tracing import (
+from enterprise.data.tracing import (
     Tracer,
     Span,
     SpanContext,
