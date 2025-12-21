@@ -533,7 +533,6 @@ class WebhookReceiver:
         payload: Dict[str, Any],
     ) -> WebhookEvent:
         """Parse GitLab webhook payload"""
-        event_name = headers.get("X-Gitlab-Event") or headers.get("x-gitlab-event", "")
         object_kind = payload.get("object_kind", "")
 
         event = WebhookEvent(
