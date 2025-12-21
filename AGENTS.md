@@ -1,4 +1,3 @@
-# AGENTS 状态标记规范
 # AGENTS 狀態標記規範
 
 本文件記錄所有 AI 代理在專案中使用的狀態標記（Status Marker）的約定。

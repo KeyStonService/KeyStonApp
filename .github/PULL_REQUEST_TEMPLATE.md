@@ -14,7 +14,7 @@
 ```yaml
 modified_files:
   - path/to/modified/file.ext
-  - path/to/another/modified/file.ext
+  - 其他變更檔案...
 
 new_files:
   - 新增檔案...
