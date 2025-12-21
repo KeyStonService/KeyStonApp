@@ -16,7 +16,7 @@ Modules:
 __version__ = "1.0.0"
 __author__ = "MachineNativeOps Team"
 
-from src.enterprise.iam import (
+from enterprise.iam import (
     Organization,
     Project,
     Repository,
@@ -29,32 +29,32 @@ from src.enterprise.iam import (
     TokenManager,
 )
 
-from src.enterprise.integrations import (
+from enterprise.integrations import (
     WebhookReceiver,
     GitProviderManager,
     CheckRunWriter,
 )
 
-from src.enterprise.events import (
+from enterprise.events import (
     EventLog,
     JobQueue,
     RunStateMachine,
     IdempotencyManager,
 )
 
-from src.enterprise.execution import (
+from enterprise.execution import (
     ExecutionIsolator,
     ResourceQuotaManager,
     SecretsManager,
 )
 
-from src.enterprise.data import (
+from enterprise.data import (
     AuditLogger,
     MetricsCollector,
     ObjectStorage,
 )
 
-from src.enterprise.reliability import (
+from enterprise.reliability import (
     DegradationStrategy,
     DisasterRecovery,
     CapacityManager,

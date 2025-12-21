@@ -11,7 +11,7 @@ from typing import Optional, List, Dict, Set, Any, Protocol
 from uuid import UUID
 import logging
 
-from src.enterprise.iam.models import (
+from enterprise.iam.models import (
     User,
     Membership,
     Role,

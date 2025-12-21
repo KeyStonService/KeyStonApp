@@ -16,7 +16,7 @@ import hashlib
 import secrets
 import logging
 
-from src.enterprise.iam.models import (
+from enterprise.iam.models import (
     APIToken,
     TokenScope,
     Permission,

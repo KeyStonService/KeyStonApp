@@ -9,26 +9,26 @@ Since we run code/content from external repos, isolation is critical:
 - Supply chain security: Traceable worker images with SBOM and signatures
 """
 
-from src.enterprise.execution.isolator import (
+from enterprise.execution.isolator import (
     ExecutionIsolator,
     ExecutionSpec,
     ExecutionResult,
     IsolationPolicy,
 )
 
-from src.enterprise.execution.quota import (
+from enterprise.execution.quota import (
     ResourceQuotaManager,
     ResourceQuota,
     QuotaExceededError,
 )
 
-from src.enterprise.execution.secrets import (
+from enterprise.execution.secrets import (
     SecretsManager,
     Secret,
     SecretType,
 )
 
-from src.enterprise.execution.supply_chain import (
+from enterprise.execution.supply_chain import (
     SupplyChainValidator,
     ImageAttestation,
     SBOM,

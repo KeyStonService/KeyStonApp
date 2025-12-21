@@ -8,7 +8,7 @@ Essential for selling "strong gate" with SLA commitment:
 - Capacity Management: Per-org quotas to prevent cost overrun
 """
 
-from src.enterprise.reliability.degradation import (
+from enterprise.reliability.degradation import (
     DegradationStrategy,
     DegradationMode,
     HealthCheck,
@@ -16,21 +16,21 @@ from src.enterprise.reliability.degradation import (
     FallbackResult,
 )
 
-from src.enterprise.reliability.disaster_recovery import (
+from enterprise.reliability.disaster_recovery import (
     DisasterRecovery,
     BackupConfig,
     RecoveryPoint,
     RecoveryPlan,
 )
 
-from src.enterprise.reliability.versioning import (
+from enterprise.reliability.versioning import (
     VersionManager,
     APIVersion,
     SchemaVersion,
     VersionCompatibility,
 )
 
-from src.enterprise.reliability.capacity import (
+from enterprise.reliability.capacity import (
     CapacityManager,
     CapacityPlan,
     UsageForecast,
