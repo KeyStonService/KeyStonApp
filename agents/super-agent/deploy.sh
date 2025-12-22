@@ -23,6 +23,12 @@ if ! command -v docker &> /dev/null; then
     exit 1
 fi
 
+# Check if curl is available
+if ! command -v curl &> /dev/null; then
+    echo "❌ curl is not installed or not in PATH"
+    exit 1
+fi
+
 # Build Docker image
 echo "📦 Building Docker image..."
 docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
@@ -45,7 +51,16 @@ if curl -f http://localhost:8080/health > /dev/null 2>&1; then
     echo "✅ Health check passed"
 else
     echo "❌ Health check failed"
-    docker stop super-agent-test
+    docker stop super-agent-test 2>/dev/null || true
+    docker rm super-agent-test 2>/dev/null || true
+    exit 1
+fi
+
+# Ensure python3 is available before running integration tests
+if ! command -v python3 &> /dev/null; then
+    echo "❌ python3 is not installed or not in PATH"
+    docker stop super-agent-test 2>/dev/null || true
+    docker rm super-agent-test 2>/dev/null || true
     exit 1
 fi
 
