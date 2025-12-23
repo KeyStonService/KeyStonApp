@@ -1,14 +1,14 @@
 # Root Specification Validation Report
 
-**Validation ID**: b070c9085dca4ad2  
-**Timestamp**: 2025-12-23T05:46:47.624625  
+**Validation ID**: 9913cd30e599ee00  
+**Timestamp**: 2025-12-23T10:41:46.393552  
 **Workspace**: /workspace  
 **Status**: ✅ PASS
 
 ## Summary
 
-- **Total Checks**: 50
-- **Passed**: 50
+- **Total Checks**: 56
+- **Passed**: 56
 - **Failed**: 0
 - **Warnings**: 0
 
@@ -55,13 +55,19 @@
 - ✅ **yaml_syntax_controlplane_baseline_config_root_provenance_yaml**: Valid YAML: controlplane/baseline/config/root.provenance.yaml
 - ✅ **yaml_syntax_controlplane_baseline_config_root_integrity_yaml**: Valid YAML: controlplane/baseline/config/root.integrity.yaml
 - ✅ **yaml_syntax_controlplane_baseline_config_root_naming-policy_yaml**: Valid YAML: controlplane/baseline/config/root.naming-policy.yaml
+- ✅ **yaml_syntax_controlplane_baseline_config_workspace_map_yaml**: Valid YAML: controlplane/baseline/config/workspace.map.yaml
 - ✅ **yaml_syntax_controlplane_baseline_specifications_root_specs_naming_yaml**: Valid YAML: controlplane/baseline/specifications/root.specs.naming.yaml
 - ✅ **yaml_syntax_controlplane_baseline_specifications_root_specs_references_yaml**: Valid YAML: controlplane/baseline/specifications/root.specs.references.yaml
 - ✅ **yaml_syntax_controlplane_baseline_specifications_root_specs_mapping_yaml**: Valid YAML: controlplane/baseline/specifications/root.specs.mapping.yaml
 - ✅ **yaml_syntax_controlplane_baseline_specifications_root_specs_logic_yaml**: Valid YAML: controlplane/baseline/specifications/root.specs.logic.yaml
 - ✅ **yaml_syntax_controlplane_baseline_specifications_root_specs_context_yaml**: Valid YAML: controlplane/baseline/specifications/root.specs.context.yaml
+- ✅ **yaml_syntax_controlplane_baseline_specifications_root_specs_namespace_yaml**: Valid YAML: controlplane/baseline/specifications/root.specs.namespace.yaml
+- ✅ **yaml_syntax_controlplane_baseline_specifications_root_specs_urn_yaml**: Valid YAML: controlplane/baseline/specifications/root.specs.urn.yaml
+- ✅ **yaml_syntax_controlplane_baseline_specifications_root_specs_paths_yaml**: Valid YAML: controlplane/baseline/specifications/root.specs.paths.yaml
 - ✅ **yaml_syntax_controlplane_baseline_registries_root_registry_modules_yaml**: Valid YAML: controlplane/baseline/registries/root.registry.modules.yaml
 - ✅ **yaml_syntax_controlplane_baseline_registries_root_registry_devices_yaml**: Valid YAML: controlplane/baseline/registries/root.registry.devices.yaml
+- ✅ **yaml_syntax_controlplane_baseline_registries_root_registry_namespaces_yaml**: Valid YAML: controlplane/baseline/registries/root.registry.namespaces.yaml
+- ✅ **yaml_syntax_controlplane_baseline_registries_root_registry_urns_yaml**: Valid YAML: controlplane/baseline/registries/root.registry.urns.yaml
 - ✅ **yaml_syntax_controlplane_baseline_validation_vectors_root_validation_vectors_yaml**: Valid YAML: controlplane/baseline/validation/vectors/root.validation.vectors.yaml
 - ✅ **yaml_syntax_controlplane_baseline_integration_root_integration_yaml**: Valid YAML: controlplane/baseline/integration/root.integration.yaml
 - ✅ **yaml_syntax_controlplane_baseline_validation_gate-root-specs_yml**: Valid YAML: controlplane/baseline/validation/gate-root-specs.yml
