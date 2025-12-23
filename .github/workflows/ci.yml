@@ -1,5 +1,5 @@
 name: 🚀 CI Pipeline
-true:
+on:
   pull_request:
     branches:
     - main

@@ -1,5 +1,5 @@
 name: 🤖 Autonomous CI Guardian
-true:
+on:
   pull_request:
     branches:
     - main

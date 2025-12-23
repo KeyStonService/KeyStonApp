@@ -1,7 +1,7 @@
 name: Gate - Root Specifications Validation
 permissions:
   contents: read
-true:
+on:
   pull_request:
     paths:
     - root.*.yaml

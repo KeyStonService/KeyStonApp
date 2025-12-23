@@ -1,5 +1,5 @@
 name: 🚪 PR Evidence Gate - 強制執行證據驗證
-true:
+on:
   pull_request:
     branches:
     - main
