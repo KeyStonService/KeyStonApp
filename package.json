@@ -1,0 +1,50 @@
+{
+  "name": "chatops-assistant",
+  "version": "1.0.0",
+  "description": "Multi-platform ChatOps Automation Assistant with Plan Cards, Rollback, and Capability Discovery",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "dev": "tsx server/index.ts",
+    "build": "vite build",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio"
+  },
+  "dependencies": {
+    "@tailwindcss/postcss": "^4.1.18",
+    "@tailwindcss/vite": "^4.1.18",
+    "@tanstack/react-query": "^5.90.12",
+    "clsx": "^2.1.1",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "drizzle-orm": "^0.45.1",
+    "express": "^5.2.1",
+    "lucide-react": "^0.562.0",
+    "pg": "^8.16.3",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3",
+    "tailwind-merge": "^3.4.0",
+    "uuid": "^13.0.0",
+    "wouter": "^3.9.0",
+    "ws": "^8.18.3",
+    "zod": "^4.2.1"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/node": "^25.0.3",
+    "@types/pg": "^8.16.0",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "@types/uuid": "^10.0.0",
+    "@types/ws": "^8.18.1",
+    "@vitejs/plugin-react": "^5.1.2",
+    "autoprefixer": "^10.4.23",
+    "drizzle-kit": "^0.31.8",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^4.1.18",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.0"
+  }
+}
