@@ -28,7 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: 检出代码
-      uses: actions/checkout@v4
+      uses: 0ad4b8f3a27c304e21892351cbf9860471245599
     - id: collect-dirs
       name: 收集配置目录
       run: "set -euo pipefail\necho \"收集用于配置验证的目录...\"\nCANDIDATE_DIRS=($VALIDATION_DIRS)\n\
@@ -80,7 +80,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: 检出代码
-      uses: actions/checkout@v4
+      uses: 0ad4b8f3a27c304e21892351cbf9860471245599
     - id: collect-dirs
       name: 收集校验目录
       run: "set -euo pipefail\nmapfile -t existing_dirs < <(for dir in $VALIDATION_DIRS;\
@@ -154,7 +154,7 @@ jobs:
         \ | tee -a \"$REPORT_FILE\"\nfi\n"
     - if: always()
       name: 上传验证报告
-      uses: actions/upload-artifact@v4
+      uses: 65462800fd760344b1a7b4382951275a0abb4808
       with:
         name: environment-validation-report
         path: environment-report.txt
@@ -165,7 +165,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: 检出代码
-      uses: actions/checkout@v4
+      uses: 0ad4b8f3a27c304e21892351cbf9860471245599
     - name: Shell脚本语法检查
       run: "set -euo pipefail\necho \"验证Shell脚本语法...\"\nmapfile -t shell_files < <(find\
         \ . -name \"*.sh\" -type f)\nif [ ${#shell_files[@]} -eq 0 ]; then\n  echo\

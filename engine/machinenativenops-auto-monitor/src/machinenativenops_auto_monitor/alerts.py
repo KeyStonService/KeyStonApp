@@ -1,356 +1,627 @@
 """
-Alert management system for MachineNativeOps Auto Monitor
-Handles threshold-based alerts and auto-repair functionality
+MachineNativeOps Auto-Monitor - Alert Management
+
+Manages alert rules, evaluation, and notification delivery.
 """
 
 import logging
-import threading
-import time
-from datetime import datetime, timedelta
-from typing import Dict, Any, List, Optional, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional, Any
+from datetime import datetime
 from enum import Enum
 
-from .config import MonitoringConfig, AutoRepairConfig
-from .storage import DatabaseManager
+
+class AlertSeverity(Enum):
+    """Alert severity levels."""
+    CRITICAL = "critical"
+    ERROR = "error"
+    WARNING = "warning"
+    INFO = "info"
+
+
+class AlertState(Enum):
+    """Alert states."""
+    PENDING = "pending"
+    FIRING = "firing"
+    RESOLVED = "resolved"
+Alert Management Module
+告警管理模組
+
+Manages alerts and notifications for the auto-monitor system.
+"""
+
+import logging
+from dataclasses import dataclass, field
+from datetime import datetime
+from enum import Enum
+from typing import Any, Dict, List, Optional
+警報管理模組
+
+Handles alert rules, alert generation, and alert routing for MachineNativeOps monitoring.
+"""
+
+import logging
+from typing import Dict, List, Optional, Callable
+from dataclasses import dataclass, field
+from datetime import datetime
+from enum import Enum
+
+logger = logging.getLogger(__name__)
+
 
 class AlertSeverity(Enum):
     """Alert severity levels"""
+    CRITICAL = "critical"
+    ERROR = "error"
+    WARNING = "warning"
+    INFO = "info"
+    """Alert severity levels."""
     INFO = "info"
     WARNING = "warning"
+    ERROR = "error"
     CRITICAL = "critical"
 
-class AlertType(Enum):
-    """Alert types"""
-    CPU_HIGH = "cpu_high"
-    MEMORY_HIGH = "memory_high"
-    DISK_HIGH = "disk_high"
-    API_RESPONSE_SLOW = "api_response_slow"
-    QUANTUM_FIDELITY_LOW = "quantum_fidelity_low"
-    QUANTUM_ERROR_RATE_HIGH = "quantum_error_rate_high"
-    SERVICE_UNAVAILABLE = "service_unavailable"
-    DATABASE_ERROR = "database_error"
+
+class AlertStatus(Enum):
+    """Alert status."""
+    FIRING = "firing"
+    RESOLVED = "resolved"
+    SILENCED = "silenced"
+
 
 @dataclass
-class Alert:
-    """Alert data structure"""
-    alert_type: AlertType
+class Alert:ㄚ
+    """Represents an alert instance."""
+    id: str
+    name: str
+    severity: AlertSeverity
+    state: AlertState
+    message: str
+    labels: Dict[str, str] = field(default_factory=dict)
+    annotations: Dict[str, str] = field(default_factory=dict)
+    started_at: datetime = field(default_factory=datetime.now)
+    resolved_at: Optional[datetime] = None
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert alert to dictionary."""
+        return {
+            'id': self.id,
+            'name': self.name,
+            'severity': self.severity.value,
+            'state': self.state.value,
+            'message': self.message,
+            'labels': self.labels,
+            'annotations': self.annotations,
+            'started_at': self.started_at.isoformat(),
+            'resolved_at': self.resolved_at.isoformat() if self.resolved_at else None
+    """Represents a monitoring alert"""
+    name: str
     severity: AlertSeverity
     message: str
-    data: Dict[str, Any]
-    timestamp: str
+    timestamp: datetime = field(default_factory=datetime.utcnow)
+    source: str = ""
+    metadata: Dict[str, Any] = field(default_factory=dict)
     resolved: bool = False
-    resolved_at: Optional[str] = None
+    resolved_at: Optional[datetime] = None
+    
+    def resolve(self):
+        """Mark alert as resolved"""
+        self.resolved = True
+        self.resolved_at = datetime.utcnow()
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary"""
+        return {
+            "name": self.name,
+            "severity": self.severity.value,
+            "message": self.message,
+            "timestamp": self.timestamp.isoformat(),
+            "source": self.source,
+            "metadata": self.metadata,
+            "resolved": self.resolved,
+            "resolved_at": self.resolved_at.isoformat() if self.resolved_at else None
+        }
+
 
 class AlertManager:
-    """Alert management and auto-repair system"""
+    """Manages alerts and alert rules"""
     
-    def __init__(self, monitoring_config: MonitoringConfig, auto_repair_config: AutoRepairConfig):
-        self.monitoring_config = monitoring_config
-        self.auto_repair_config = auto_repair_config
+    def __init__(self, config: Dict[str, Any] = None):
+        """Initialize alert manager"""
+        self.config = config or {}
+        self.active_alerts: List[Alert] = []
+        self.alert_history: List[Alert] = []
+        self.alert_rules = self._load_alert_rules()
+    
+    def _load_alert_rules(self) -> Dict[str, Any]:
+        """Load alert rules from configuration"""
+        return self.config.get("alert_rules", {
+            "cpu_threshold": 80.0,
+            "memory_threshold": 85.0,
+            "disk_threshold": 90.0,
+            "service_down_threshold": 1
+        })
+    
+    def check_metric(self, metric_name: str, value: float, threshold: float = None) -> Optional[Alert]:
+        """
+        Check if a metric exceeds threshold and create alert if needed
+        
+        Args:
+            metric_name: Name of the metric
+            value: Current metric value
+            threshold: Alert threshold (uses configured default if not provided)
+        
+        Returns:
+            Alert object if threshold exceeded, None otherwise
+        """
+        if threshold is None:
+            threshold = self.alert_rules.get(f"{metric_name}_threshold", 100.0)
+        
+        if value >= threshold:
+            severity = self._determine_severity(metric_name, value, threshold)
+            alert = Alert(
+                name=f"{metric_name}_high",
+                severity=severity,
+                message=f"{metric_name} is at {value:.1f}% (threshold: {threshold}%)",
+                source="auto-monitor",
+                metadata={
+                    "metric": metric_name,
+                    "value": value,
+                    "threshold": threshold
+                }
+            )
+            return alert
+        
+        return None
+    
+    def _determine_severity(self, metric_name: str, value: float, threshold: float) -> AlertSeverity:
+        """Determine alert severity based on how much threshold is exceeded"""
+        if value >= threshold * 1.2:  # 20% over threshold
+            return AlertSeverity.CRITICAL
+        elif value >= threshold * 1.1:  # 10% over threshold
+            return AlertSeverity.ERROR
+        elif value >= threshold:
+            return AlertSeverity.WARNING
+        else:
+            return AlertSeverity.INFO
+    
+    def add_alert(self, alert: Alert):
+        """Add a new alert"""
+        # Check if similar alert already exists
+        existing = self._find_similar_alert(alert)
+        if existing:
+            logger.debug(f"Alert {alert.name} already exists, updating...")
+            existing.timestamp = alert.timestamp
+            existing.metadata = alert.metadata
+        else:
+            logger.info(f"New alert: {alert.name} - {alert.severity.value} - {alert.message}")
+            self.active_alerts.append(alert)
+            self._notify_alert(alert)
+    
+    def _find_similar_alert(self, alert: Alert) -> Optional[Alert]:
+        """Find existing similar alert"""
+        for existing_alert in self.active_alerts:
+            if (existing_alert.name == alert.name and 
+                existing_alert.source == alert.source and
+                not existing_alert.resolved):
+                return existing_alert
+        return None
+    
+    def resolve_alert(self, alert_name: str, source: str = ""):
+        """Resolve an active alert"""
+        for alert in self.active_alerts:
+            if alert.name == alert_name and (not source or alert.source == source):
+                if not alert.resolved:
+                    alert.resolve()
+                    logger.info(f"Resolved alert: {alert_name}")
+                    self.alert_history.append(alert)
+                    self.active_alerts.remove(alert)
+                    return True
+        return False
+    
+    def _notify_alert(self, alert: Alert):
+        """Send alert notifications"""
+        # TODO: Implement notification channels (email, slack, webhook, etc.)
+        logger.warning(f"ALERT: [{alert.severity.value}] {alert.message}")
+    
+    def get_active_alerts(self, severity: AlertSeverity = None) -> List[Alert]:
+        """Get all active alerts, optionally filtered by severity"""
+        if severity:
+            return [a for a in self.active_alerts if a.severity == severity]
+        return self.active_alerts.copy()
+    
+    def get_alert_summary(self) -> Dict[str, int]:
+        """Get summary of active alerts by severity"""
+        summary = {
+            "total": len(self.active_alerts),
+            "critical": 0,
+            "error": 0,
+            "warning": 0,
+            "info": 0
+        }
+        
+        for alert in self.active_alerts:
+            summary[alert.severity.value] += 1
+        
+        return summary
+    
+    def clear_resolved_alerts(self):
+        """Move all resolved alerts to history"""
+        resolved = [a for a in self.active_alerts if a.resolved]
+        for alert in resolved:
+            self.alert_history.append(alert)
+            self.active_alerts.remove(alert)
+        
+        logger.info(f"Cleared {len(resolved)} resolved alerts")
+    """Represents a monitoring alert."""
+    name: str
+    severity: AlertSeverity
+    message: str
+    timestamp: datetime = field(default_factory=datetime.now)
+    status: AlertStatus = AlertStatus.FIRING
+    labels: Dict[str, str] = field(default_factory=dict)
+    annotations: Dict[str, str] = field(default_factory=dict)
+    
+    def to_dict(self) -> Dict:
+        """Convert alert to dictionary."""
+        return {
+            'name': self.name,
+            'severity': self.severity.value,
+            'message': self.message,
+            'timestamp': self.timestamp.isoformat(),
+            'status': self.status.value,
+            'labels': self.labels,
+            'annotations': self.annotations,
+        }
+
+
+@dataclass
+class AlertRule:
+    """Defines an alert rule."""
+    name: str
+    description: str
+    severity: AlertSeverity
+    condition: str
+    threshold: float
+    duration: int = 60  # seconds
+    labels: Dict[str, str] = field(default_factory=dict)
+    annotations: Dict[str, str] = field(default_factory=dict)
+    enabled: bool = True
+    
+    def evaluate(self, value: float) -> bool:
+        """
+        Evaluate the alert rule against a value.
+        
+        Args:
+            value: The metric value to evaluate
+            
+        Returns:
+            True if the alert condition is met, False otherwise
+        """
+        # Simple threshold comparison
+        # In production, this would support complex expressions
+        if '>' in self.condition:
+            return value > self.threshold
+        elif '<' in self.condition:
+            return value < self.threshold
+        elif '=' in self.condition:
+            return value == self.threshold
+        elif '!=' in self.condition:
+            return value != self.threshold
+        else:
+            return False
+
+
+class AlertManager:
+    """
+    Manages alert rules and active alerts.
+    """
+    
+    def __init__(self, config: Dict[str, Any]):
+        """
+        Initialize alert manager.
+        
+        Args:
+            config: Alert manager configuration
+        """
+        self.config = config
         self.logger = logging.getLogger(__name__)
-        
-        # Database manager
-        self.db_manager: Optional[DatabaseManager] = None
-        
-        # Active alerts tracking
+        self.rules: Dict[str, AlertRule] = {}
         self.active_alerts: Dict[str, Alert] = {}
         self.alert_history: List[Alert] = []
         
-        # Auto-repair handlers
-        self.repair_handlers: Dict[AlertType, Callable] = {}
-        self._register_default_handlers()
+        self._load_rules()
+    
+    def _load_rules(self):
+        """Load alert rules from configuration."""
+        rules_config = self.config.get('rules', [])
         
-        # Thread lock
-        self._lock = threading.Lock()
-        
-        self.logger.info("Alert manager initialized")
-    
-    def set_database_manager(self, db_manager: DatabaseManager):
-        """Set database manager for persistence"""
-        self.db_manager = db_manager
-        
-        # Load active alerts from database
-        self._load_active_alerts()
-    
-    def _register_default_handlers(self):
-        """Register default auto-repair handlers"""
-        self.repair_handlers = {
-            AlertType.SERVICE_UNAVAILABLE: self._handle_service_unavailable,
-            AlertType.DATABASE_ERROR: self._handle_database_error,
-            # Add more handlers as needed
-        }
-    
-    def check_alerts(self, metrics: Dict[str, Any]):
-        """Check metrics against thresholds and generate alerts"""
-        try:
-            timestamp = metrics.get('timestamp', datetime.utcnow().isoformat())
-            
-            # CPU usage check
-            cpu_usage = metrics.get('cpu_usage_percent', 0)
-            if cpu_usage > self.monitoring_config.cpu_threshold:
-                self._create_alert(
-                    AlertType.CPU_HIGH,
-                    AlertSeverity.WARNING if cpu_usage < 95 else AlertSeverity.CRITICAL,
-                    f"High CPU usage: {cpu_usage:.1f}%",
-                    {'cpu_usage': cpu_usage, 'threshold': self.monitoring_config.cpu_threshold},
-                    timestamp
-                )
-            
-            # Memory usage check
-            memory_usage = metrics.get('memory_usage_percent', 0)
-            if memory_usage > self.monitoring_config.memory_threshold:
-                self._create_alert(
-                    AlertType.MEMORY_HIGH,
-                    AlertSeverity.WARNING if memory_usage < 95 else AlertSeverity.CRITICAL,
-                    f"High memory usage: {memory_usage:.1f}%",
-                    {'memory_usage': memory_usage, 'threshold': self.monitoring_config.memory_threshold},
-                    timestamp
-                )
-            
-            # Disk usage check
-            disk_usage = metrics.get('disk_usage_percent', 0)
-            if disk_usage > self.monitoring_config.disk_threshold:
-                self._create_alert(
-                    AlertType.DISK_HIGH,
-                    AlertSeverity.WARNING if disk_usage < 98 else AlertSeverity.CRITICAL,
-                    f"High disk usage: {disk_usage:.1f}%",
-                    {'disk_usage': disk_usage, 'threshold': self.monitoring_config.disk_threshold},
-                    timestamp
-                )
-            
-            # API response time check
-            api_response_time = metrics.get('api_response_time_ms', 0)
-            if api_response_time > self.monitoring_config.api_response_threshold:
-                self._create_alert(
-                    AlertType.API_RESPONSE_SLOW,
-                    AlertSeverity.WARNING,
-                    f"Slow API response: {api_response_time:.0f}ms",
-                    {'response_time': api_response_time, 'threshold': self.monitoring_config.api_response_threshold},
-                    timestamp
-                )
-            
-            # Quantum metrics checks
-            if 'quantum_fidelity' in metrics:
-                fidelity = metrics['quantum_fidelity']
-                if fidelity < self.monitoring_config.quantum_fidelity_threshold:
-                    self._create_alert(
-                        AlertType.QUANTUM_FIDELITY_LOW,
-                        AlertSeverity.WARNING,
-                        f"Low quantum fidelity: {fidelity:.3f}",
-                        {'fidelity': fidelity, 'threshold': self.monitoring_config.quantum_fidelity_threshold},
-                        timestamp
-                    )
-            
-            if 'quantum_error_rate' in metrics:
-                error_rate = metrics['quantum_error_rate']
-                if error_rate > self.monitoring_config.quantum_error_rate_threshold:
-                    self._create_alert(
-                        AlertType.QUANTUM_ERROR_RATE_HIGH,
-                        AlertSeverity.WARNING,
-                        f"High quantum error rate: {error_rate:.4f}",
-                        {'error_rate': error_rate, 'threshold': self.monitoring_config.quantum_error_rate_threshold},
-                        timestamp
-                    )
-            
-            # Service availability check
-            if 'kubernetes_services_healthy' in metrics and 'kubernetes_services_total' in metrics:
-                healthy = metrics['kubernetes_services_healthy']
-                total = metrics['kubernetes_services_total']
-                if total > 0 and healthy < total:
-                    self._create_alert(
-                        AlertType.SERVICE_UNAVAILABLE,
-                        AlertSeverity.WARNING,
-                        f"Services unavailable: {total - healthy}/{total} unhealthy",
-                        {'healthy': healthy, 'total': total},
-                        timestamp
-                    )
-            
-        except Exception as e:
-            self.logger.error(f"Alert check failed: {e}")
-    
-    def _create_alert(self, alert_type: AlertType, severity: AlertSeverity, 
-                     message: str, data: Dict[str, Any], timestamp: str):
-        """Create and process alert"""
-        with self._lock:
-            alert_key = f"{alert_type.value}_{timestamp}"
-            
-            # Check if similar alert already exists
-            if self._similar_active_alert_exists(alert_type, data):
-                return
-            
-            alert = Alert(
-                alert_type=alert_type,
-                severity=severity,
-                message=message,
-                data=data,
-                timestamp=timestamp
+        for rule_config in rules_config:
+            rule = AlertRule(
+                name=rule_config['name'],
+                description=rule_config.get('description', ''),
+                severity=AlertSeverity(rule_config.get('severity', 'warning')),
+                condition=rule_config['condition'],
+                threshold=rule_config['threshold'],
+                duration=rule_config.get('duration', 60),
+                labels=rule_config.get('labels', {}),
+                annotations=rule_config.get('annotations', {}),
+                enabled=rule_config.get('enabled', True)
             )
             
-            self.active_alerts[alert_key] = alert
-            self.alert_history.append(alert)
-            
-            # Store in database
-            if self.db_manager:
-                self.db_manager.store_alert(
-                    alert_type.value,
-                    severity.value,
-                    message,
-                    data
-                )
-            
-            self.logger.warning(f"Alert created: {alert_type.value} - {message}")
-            
-            # Trigger auto-repair if enabled and applicable
-            if self.auto_repair_config.enabled and alert_type in self.repair_handlers:
-                self._trigger_auto_repair(alert)
+            self.rules[rule.name] = rule
+            self.logger.info(f"Loaded alert rule: {rule.name}")
     
-    def _similar_active_alert_exists(self, alert_type: AlertType, data: Dict[str, Any]) -> bool:
-        """Check if similar active alert already exists"""
-        for alert in self.active_alerts.values():
-            if alert.alert_type == alert_type and not alert.resolved:
-                # Check if data is similar (within 5% for numerical values)
-                for key, value in data.items():
-                    if isinstance(value, (int, float)) and key in alert.data:
-                        old_value = alert.data[key]
-                        if isinstance(old_value, (int, float)):
-                            diff = abs(value - old_value) / max(old_value, 1)
-                            if diff < 0.05:  # Within 5%
-                                return True
-        return False
-    
-    def _trigger_auto_repair(self, alert: Alert):
-        """Trigger auto-repair for alert"""
-        try:
-            handler = self.repair_handlers.get(alert.alert_type)
-            if not handler:
-                self.logger.info(f"No auto-repair handler for {alert.alert_type.value}")
-                return
+    def evaluate_metrics(self, metrics: Dict[str, float]):
+        """
+        Evaluate metrics against all alert rules.
+        
+        Args:
+            metrics: Dictionary of metric name to value
+        """
+        for rule_name, rule in self.rules.items():
+            if not rule.enabled:
+                continue
             
-            self.logger.info(f"Triggering auto-repair for {alert.alert_type.value}")
+            # Find matching metric
+            metric_value = metrics.get(rule_name)
+            if metric_value is None:
+                continue
             
-            # Run repair in separate thread
-            repair_thread = threading.Thread(
-                target=self._execute_repair,
-                args=(alert, handler),
-                daemon=True
-            )
-            repair_thread.start()
-            
-        except Exception as e:
-            self.logger.error(f"Failed to trigger auto-repair: {e}")
-    
-    def _execute_repair(self, alert: Alert, handler: Callable):
-        """Execute auto-repair handler"""
-        try:
-            success = handler(alert)
-            
-            if success:
-                self._resolve_alert(alert.alert_type, "Auto-repair successful")
-                self.logger.info(f"Auto-repair successful for {alert.alert_type.value}")
+            # Evaluate rule
+            if rule.evaluate(metric_value):
+                self._fire_alert(rule, metric_value)
             else:
-                self.logger.warning(f"Auto-repair failed for {alert.alert_type.value}")
-                
-        except Exception as e:
-            self.logger.error(f"Auto-repair execution failed: {e}")
+                self._resolve_alert(rule_name)
     
-    def _resolve_alert(self, alert_type: AlertType, reason: str):
-        """Resolve alerts of specific type"""
-        with self._lock:
-            resolved_count = 0
-            current_time = datetime.utcnow().isoformat()
-            
-            for key, alert in list(self.active_alerts.items()):
-                if alert.alert_type == alert_type and not alert.resolved:
-                    alert.resolved = True
-                    alert.resolved_at = current_time
-                    del self.active_alerts[key]
-                    resolved_count += 1
-            
-            # Update database
-            if self.db_manager and resolved_count > 0:
-                # This is simplified - in practice, you'd track alert IDs
-                self.logger.info(f"Resolved {resolved_count} {alert_type.value} alerts: {reason}")
-    
-    def get_active_alerts(self) -> List[Dict[str, Any]]:
-        """Get active alerts"""
-        with self._lock:
-            alerts = []
-            for alert in self.active_alerts.values():
-                alert_dict = {
-                    'alert_type': alert.alert_type.value,
-                    'severity': alert.severity.value,
-                    'message': alert.message,
-                    'data': alert.data,
-                    'timestamp': alert.timestamp,
-                }
-                alerts.append(alert_dict)
-            return alerts
-    
-    def get_alert_history(self, limit: int = 100) -> List[Dict[str, Any]]:
-        """Get alert history"""
-        return [
-            {
-                'alert_type': alert.alert_type.value,
-                'severity': alert.severity.value,
-                'message': alert.message,
-                'data': alert.data,
-                'timestamp': alert.timestamp,
-                'resolved': alert.resolved,
-                'resolved_at': alert.resolved_at,
-            }
-            for alert in self.alert_history[-limit:]
-        ]
-    
-    def _load_active_alerts(self):
-        """Load active alerts from database"""
-        if not self.db_manager:
+    def _fire_alert(self, rule: AlertRule, value: float):
+        """
+        Fire an alert based on a rule.
+        
+        Args:
+            rule: The alert rule that triggered
+            value: The metric value that triggered the alert
+        """
+        alert_id = f"{rule.name}_{datetime.now().timestamp()}"
+        
+        # Check if alert already exists
+        if rule.name in self.active_alerts:
+            self.logger.debug(f"Alert already active: {rule.name}")
             return
         
-        try:
-            db_alerts = self.db_manager.get_active_alerts()
+        # Create new alert
+        alert = Alert(
+            id=alert_id,
+            name=rule.name,
+            severity=rule.severity,
+            state=AlertState.FIRING,
+            message=f"{rule.description} (current value: {value}, threshold: {rule.threshold})",
+            labels=rule.labels.copy(),
+            annotations=rule.annotations.copy()
+        )
+        
+        self.active_alerts[rule.name] = alert
+        self.alert_history.append(alert)
+        
+        self.logger.warning(
+            f"ALERT FIRED: {alert.name} [{alert.severity.value}] - {alert.message}"
+        )
+        
+        # Send notification (would integrate with actual notification system)
+        self._send_notification(alert)
+    
+    def _resolve_alert(self, rule_name: str):
+        """
+        Resolve an active alert.
+        
+        Args:
+            rule_name: Name of the alert rule
+        """
+        if rule_name not in self.active_alerts:
+            return
+        
+        alert = self.active_alerts[rule_name]
+        alert.state = AlertState.RESOLVED
+        alert.resolved_at = datetime.now()
+        
+        self.logger.info(f"ALERT RESOLVED: {alert.name}")
+        
+        # Send resolution notification
+        self._send_notification(alert)
+        
+        # Remove from active alerts
+        del self.active_alerts[rule_name]
+    
+    def _send_notification(self, alert: Alert):
+        """
+        Send alert notification.
+        
+        Args:
+            alert: The alert to notify about
+        """
+        # In production, this would integrate with notification channels
+        # (email, Slack, PagerDuty, etc.)
+        self.logger.info(f"Notification sent for alert: {alert.name} ({alert.state.value})")
+    
+    def get_active_alerts(self) -> List[Alert]:
+        """Get list of active alerts."""
+        return list(self.active_alerts.values())
+    
+    def get_alert_history(self, limit: int = 100) -> List[Alert]:
+        """
+        Get alert history.
+        
+        Args:
+            limit: Maximum number of alerts to return
             
-            for db_alert in db_alerts:
-                alert_type = AlertType(db_alert['alert_type'])
-                severity = AlertSeverity(db_alert['severity'])
-                
-                alert = Alert(
-                    alert_type=alert_type,
-                    severity=severity,
-                    message=db_alert['message'],
-                    data=db_alert['data'],
-                    timestamp=db_alert['timestamp'],
+        Returns:
+            List of recent alerts
+        """
+        return self.alert_history[-limit:]
+    
+    def add_rule(self, rule: AlertRule):
+        """
+        Add a new alert rule.
+        
+        Args:
+            rule: The alert rule to add
+        """
+        self.rules[rule.name] = rule
+        self.logger.info(f"Added alert rule: {rule.name}")
+    
+    def remove_rule(self, rule_name: str):
+        """
+        Remove an alert rule.
+        
+        Args:
+            rule_name: Name of the rule to remove
+        """
+        if rule_name in self.rules:
+            del self.rules[rule_name]
+            self.logger.info(f"Removed alert rule: {rule_name}")
+    
+    def get_stats(self) -> Dict[str, Any]:
+        """Get alert manager statistics."""
+        return {
+            'total_rules': len(self.rules),
+            'enabled_rules': sum(1 for r in self.rules.values() if r.enabled),
+            'active_alerts': len(self.active_alerts),
+            'total_alerts_fired': len(self.alert_history),
+            'alerts_by_severity': {
+                severity.value: sum(
+                    1 for a in self.active_alerts.values()
+                    if a.severity == severity
                 )
-                
-                key = f"{alert_type.value}_{alert.timestamp}"
-                self.active_alerts[key] = alert
-            
-            self.logger.info(f"Loaded {len(self.active_alerts)} active alerts from database")
-            
-        except Exception as e:
-            self.logger.error(f"Failed to load active alerts: {e}")
+                for severity in AlertSeverity
+            }
+        }
+    """Defines an alert rule with condition and action."""
+    name: str
+    condition: Callable[[Dict], bool]
+    severity: AlertSeverity
+    message_template: str
+    labels: Dict[str, str] = field(default_factory=dict)
+    enabled: bool = True
     
-    # Default auto-repair handlers
-    def _handle_service_unavailable(self, alert: Alert) -> bool:
-        """Handle service unavailability"""
+    def evaluate(self, metrics: Dict) -> Optional[Alert]:
+        """Evaluate the rule against metrics and generate alert if needed."""
+        if not self.enabled:
+            return None
+        
         try:
-            # This is a placeholder - in practice, you'd implement
-            # Kubernetes service restart, scale-up, etc.
-            self.logger.info("Service unavailable: would attempt restart/repair")
-            return True
-            
+            if self.condition(metrics):
+                message = self.message_template.format(**metrics)
+                return Alert(
+                    name=self.name,
+                    severity=self.severity,
+                    message=message,
+                    labels=self.labels,
+                )
         except Exception as e:
-            self.logger.error(f"Service repair failed: {e}")
-            return False
+            logger.error(f"Error evaluating rule '{self.name}': {e}")
+        
+        return None
+
+
+class AlertManager:
+    """Manages alert rules and active alerts."""
     
-    def _handle_database_error(self, alert: Alert) -> bool:
-        """Handle database errors"""
-        try:
-            # This is a placeholder - in practice, you'd implement
-            # database reconnection, cleanup, etc.
-            self.logger.info("Database error: would attempt reconnection/repair")
-            return True
+    def __init__(self):
+        self.rules: List[AlertRule] = []
+        self.active_alerts: Dict[str, Alert] = {}
+        self.alert_history: List[Alert] = []
+        self.handlers: List[Callable[[Alert], None]] = []
+    
+    def add_rule(self, rule: AlertRule):
+        """Add an alert rule."""
+        self.rules.append(rule)
+        logger.info(f"Added alert rule: {rule.name}")
+    
+    def remove_rule(self, rule_name: str):
+        """Remove an alert rule by name."""
+        self.rules = [r for r in self.rules if r.name != rule_name]
+        logger.info(f"Removed alert rule: {rule_name}")
+    
+    def add_handler(self, handler: Callable[[Alert], None]):
+        """Add an alert handler function."""
+        self.handlers.append(handler)
+    
+    def evaluate_rules(self, metrics: Dict):
+        """Evaluate all rules against current metrics."""
+        for rule in self.rules:
+            alert = rule.evaluate(metrics)
+            if alert:
+                self._fire_alert(alert)
+            elif rule.name in self.active_alerts:
+                self._resolve_alert(rule.name)
+    
+    def _fire_alert(self, alert: Alert):
+        """Fire an alert."""
+        if alert.name not in self.active_alerts:
+            logger.warning(f"🚨 Alert fired: {alert.name} - {alert.message}")
+            self.active_alerts[alert.name] = alert
+            self.alert_history.append(alert)
             
-        except Exception as e:
-            self.logger.error(f"Database repair failed: {e}")
-            return False
+            # Call all handlers
+            for handler in self.handlers:
+                try:
+                    handler(alert)
+                except Exception as e:
+                    logger.error(f"Error in alert handler: {e}")
+    
+    def _resolve_alert(self, alert_name: str):
+        """Resolve an active alert."""
+        if alert_name in self.active_alerts:
+            alert = self.active_alerts[alert_name]
+            alert.status = AlertStatus.RESOLVED
+            logger.info(f"✅ Alert resolved: {alert_name}")
+            del self.active_alerts[alert_name]
+    
+    def get_active_alerts(self) -> List[Alert]:
+        """Get all active alerts."""
+        return list(self.active_alerts.values())
+    
+    def get_alert_history(self, limit: int = 100) -> List[Alert]:
+        """Get alert history with optional limit."""
+        return self.alert_history[-limit:]
+    
+    def silence_alert(self, alert_name: str):
+        """Silence an active alert."""
+        if alert_name in self.active_alerts:
+            self.active_alerts[alert_name].status = AlertStatus.SILENCED
+            logger.info(f"🔇 Alert silenced: {alert_name}")
+
+
+# Pre-defined alert rules for common scenarios
+def create_default_rules() -> List[AlertRule]:
+    """Create default alert rules for MachineNativeOps monitoring."""
+    return [
+        AlertRule(
+            name="high_cpu_usage",
+            condition=lambda m: m.get('cpu_percent', 0) > 80,
+            severity=AlertSeverity.WARNING,
+            message_template="CPU usage is high: {cpu_percent}%",
+            labels={'component': 'system', 'resource': 'cpu'},
+        ),
+        AlertRule(
+            name="high_memory_usage",
+            condition=lambda m: m.get('memory_percent', 0) > 85,
+            severity=AlertSeverity.WARNING,
+            message_template="Memory usage is high: {memory_percent}%",
+            labels={'component': 'system', 'resource': 'memory'},
+        ),
+        AlertRule(
+            name="disk_space_low",
+            condition=lambda m: m.get('disk_percent', 0) > 90,
+            severity=AlertSeverity.CRITICAL,
+            message_template="Disk space is critically low: {disk_percent}%",
+            labels={'component': 'system', 'resource': 'disk'},
+        ),
+        AlertRule(
+            name="service_down",
+            condition=lambda m: not m.get('service_healthy', True),
+            severity=AlertSeverity.CRITICAL,
+            message_template="Service is down: {service_name}",
+            labels={'component': 'service', 'health': 'down'},
+        ),
+    ]

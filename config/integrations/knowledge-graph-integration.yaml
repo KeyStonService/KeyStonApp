@@ -54,6 +54,7 @@ knowledge_graph_integration:
     - Issue
     - Pull Request
     extraction_methods:
+<<<<<<< HEAD
     - enabled: true
       model: spacy-en_core_web_lg
       name: named_entity_recognition
@@ -61,6 +62,66 @@ knowledge_graph_integration:
       name: dependency_parsing
     - enabled: false
       name: semantic_role_labeling
+=======
+      - name: "named_entity_recognition"
+        model: "spacy-en_core_web_lg"
+        enabled: true
+      - name: "dependency_parsing"
+        enabled: true
+      - name: "semantic_role_labeling"
+        enabled: false
+  
+  # Relationship Extraction
+  relationship_extraction:
+    enabled: true
+    
+    relationship_types:
+      - "DEPENDS_ON"
+      - "PROVIDES"
+      - "USES"
+      - "CONFIGURES"
+      - "DEPLOYS"
+      - "OWNS"
+      - "MAINTAINS"
+      - "IMPLEMENTS"
+      - "RELATES_TO"
+      - "REFERENCES"
+    
+    extraction_methods:
+      - name: "rule_based"
+        enabled: true
+      - name: "pattern_matching"
+        enabled: true
+      - name: "ml_based"
+        enabled: false
+  
+  # Semantic Search
+  semantic_search:
+    enabled: true
+    
+    embedding_model:
+      name: "machinenativeops-embed-v2"
+      dimension: 1024
+      max_sequence_length: 512
+    
+    search_strategies:
+      - name: "vector_similarity"
+        weight: 0.6
+        enabled: true
+      - name: "graph_traversal"
+        weight: 0.3
+        enabled: true
+      - name: "keyword_matching"
+        weight: 0.1
+        enabled: true
+    
+    ranking:
+      algorithm: "hybrid_fusion"
+      relevance_threshold: 0.7
+      max_results: 20
+  
+  # Graph Construction
+>>>>>>> main
   graph_construction:
     batch_size: 100
     consistency_check:

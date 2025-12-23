@@ -35,7 +35,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: 檢出代碼
-      uses: actions/checkout@v4
+      uses: 0ad4b8f3a27c304e21892351cbf9860471245599
       with:
         fetch-depth: 0
     - name: 設置 ${{ matrix.language }} 環境
@@ -73,9 +73,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: 檢出代碼
-      uses: actions/checkout@v4
+      uses: 0ad4b8f3a27c304e21892351cbf9860471245599
     - name: 設置 Python 環境
-      uses: actions/setup-python@v5
+      uses: 82c7e631bb3cdc910f68e0081d534527d238d7a7
       with:
         python-version: ${{ env.PYTHON_VERSION }}
     - name: 安裝合規性檢查工具
@@ -158,7 +158,7 @@ jobs:
 
         '
     - name: 上傳合規性報告
-      uses: actions/upload-artifact@v4
+      uses: 65462800fd760344b1a7b4382951275a0abb4808
       with:
         name: compliance-report
         path: 'compliance-report.md
@@ -175,7 +175,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: 檢出代碼
-      uses: actions/checkout@v4
+      uses: 0ad4b8f3a27c304e21892351cbf9860471245599
     - name: 設置 Docker Buildx
       uses: docker/setup-buildx-action@v3
     - name: 登錄容器註冊表
@@ -257,7 +257,7 @@ jobs:
 
         '
     - name: 上傳容器安全報告
-      uses: actions/upload-artifact@v4
+      uses: 65462800fd760344b1a7b4382951275a0abb4808
       with:
         name: container-security-report
         path: 'container-security-report.md
@@ -278,13 +278,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: 檢出代碼
-      uses: actions/checkout@v4
+      uses: 0ad4b8f3a27c304e21892351cbf9860471245599
     - name: 設置 Python 環境
-      uses: actions/setup-python@v5
+      uses: 82c7e631bb3cdc910f68e0081d534527d238d7a7
       with:
         python-version: ${{ env.PYTHON_VERSION }}
     - name: 設置 Node.js 環境
-      uses: actions/setup-node@v4
+      uses: 1e60f620b9541d16bece96c5465dc8ee9832be0b
       with:
         node-version: ${{ env.NODE_VERSION }}
     - name: 安裝掃描工具
@@ -373,7 +373,7 @@ jobs:
 
         '
     - name: 上傳依賴掃描報告
-      uses: actions/upload-artifact@v4
+      uses: 65462800fd760344b1a7b4382951275a0abb4808
       with:
         name: dependency-security-report
         path: 'dependency-security-report.md
@@ -394,7 +394,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: 檢出代碼
-      uses: actions/checkout@v4
+      uses: 0ad4b8f3a27c304e21892351cbf9860471245599
       with:
         fetch-depth: 0
     - env:
@@ -456,7 +456,7 @@ jobs:
       with:
         sarif_file: gitleaks-results.sarif
     - name: 上傳密鑰掃描報告
-      uses: actions/upload-artifact@v4
+      uses: 65462800fd760344b1a7b4382951275a0abb4808
       with:
         name: secrets-scan-report
         path: 'secrets-scan-report.md
@@ -480,7 +480,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: 下載所有安全報告
-      uses: actions/download-artifact@v4
+      uses: 6b208ae046db98c579e8a328f74b955651f427c0
       with:
         merge-multiple: true
     - name: 生成安全總結報告
@@ -515,7 +515,7 @@ jobs:
         \ >> security-summary-report.md\n\ncat security-summary-report.md\n"
     - if: failure() && github.event_name == 'pull_request'
       name: 評論PR（如果發現安全問題）
-      uses: actions/github-script@v7
+      uses: 60a0d83039c74a4aee543508d2ffcb1c3799cdea
       with:
         script: "const fs = require('fs');\n\nif (fs.existsSync('security-summary-report.md'))\
           \ {\n  const report = fs.readFileSync('security-summary-report.md', 'utf8');\n\
@@ -523,7 +523,7 @@ jobs:
           \    owner: context.repo.owner,\n    repo: context.repo.repo,\n    body:\
           \ report\n  });\n}\n"
     - name: 上傳安全總結報告
-      uses: actions/upload-artifact@v4
+      uses: 65462800fd760344b1a7b4382951275a0abb4808
       with:
         name: security-summary-report
         path: security-summary-report.md

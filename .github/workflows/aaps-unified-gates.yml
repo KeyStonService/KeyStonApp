@@ -21,7 +21,7 @@ jobs:
         ports:
         - 6379:6379
     steps:
-    - uses: actions/checkout@v4
+    - uses: 0ad4b8f3a27c304e21892351cbf9860471245599
       with:
         fetch-depth: 0
     - name: Setup AAPS Environment
@@ -215,14 +215,14 @@ jobs:
         '
     - if: always()
       name: Upload Gate Artifacts
-      uses: actions/upload-artifact@v4
+      uses: 65462800fd760344b1a7b4382951275a0abb4808
       with:
         name: aaps-gate-report-${{ github.run_number }}
         path: dist/
         retention-days: 30
     - if: failure()
       name: Upload Auto-Fix Patches
-      uses: actions/upload-artifact@v4
+      uses: 65462800fd760344b1a7b4382951275a0abb4808
       with:
         name: auto-fix-patches-${{ github.run_number }}
         path: auto-fix-patches/

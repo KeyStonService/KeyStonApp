@@ -43,7 +43,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: 檢出代碼
-      uses: actions/checkout@v4
+      uses: 0ad4b8f3a27c304e21892351cbf9860471245599
     - name: 設置 Docker Buildx
       uses: docker/setup-buildx-action@v3
     - name: 登錄容器註冊表
@@ -120,7 +120,7 @@ jobs:
 
         '
     - name: 上傳鏡像信息
-      uses: actions/upload-artifact@v4
+      uses: 65462800fd760344b1a7b4382951275a0abb4808
       with:
         name: docker-image-info
         path: docker-info.md
@@ -142,7 +142,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: 檢出代碼
-      uses: actions/checkout@v4
+      uses: 0ad4b8f3a27c304e21892351cbf9860471245599
     - name: 設置 Kubernetes
       uses: azure/setup-kubectl@v3
       with:
@@ -227,7 +227,7 @@ jobs:
 
         '
     - name: 上傳部署報告
-      uses: actions/upload-artifact@v4
+      uses: 65462800fd760344b1a7b4382951275a0abb4808
       with:
         name: deployment-report-${{ matrix.environment }}
         path: deployment-report.md
@@ -244,9 +244,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: 檢出代碼
-      uses: actions/checkout@v4
+      uses: 0ad4b8f3a27c304e21892351cbf9860471245599
     - name: 設置 Node.js 環境
-      uses: actions/setup-node@v4
+      uses: 1e60f620b9541d16bece96c5465dc8ee9832be0b
       with:
         node-version: '20'
     - name: 安裝性能測試工具
@@ -304,7 +304,7 @@ jobs:
 
         '
     - name: 上傳性能測試報告
-      uses: actions/upload-artifact@v4
+      uses: 65462800fd760344b1a7b4382951275a0abb4808
       with:
         name: performance-test-report
         path: 'performance-test-report.md
@@ -328,7 +328,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: 下載所有報告
-      uses: actions/download-artifact@v4
+      uses: 6b208ae046db98c579e8a328f74b955651f427c0
       with:
         merge-multiple: true
     - name: 生成部署總結
@@ -350,7 +350,7 @@ jobs:
         \ deployment-summary.md\nfi\n\ncat deployment-summary.md\n"
     - if: always()
       name: 發送通知
-      uses: actions/github-script@v7
+      uses: 60a0d83039c74a4aee543508d2ffcb1c3799cdea
       with:
         script: "const fs = require('fs');\n\nif (fs.existsSync('deployment-summary.md'))\
           \ {\n  const summary = fs.readFileSync('deployment-summary.md', 'utf8');\n\
@@ -365,7 +365,7 @@ jobs:
           \      owner: context.repo.owner,\n      repo: context.repo.repo,\n    \
           \  body: summary\n    });\n  }\n}\n"
     - name: 上傳部署總結
-      uses: actions/upload-artifact@v4
+      uses: 65462800fd760344b1a7b4382951275a0abb4808
       with:
         name: deployment-summary
         path: deployment-summary.md
@@ -378,11 +378,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: 檢出代碼
-      uses: actions/checkout@v4
+      uses: 0ad4b8f3a27c304e21892351cbf9860471245599
       with:
         fetch-depth: 0
     - name: 設置 Python 環境
-      uses: actions/setup-python@v5
+      uses: 82c7e631bb3cdc910f68e0081d534527d238d7a7
       with:
         python-version: '3.11'
     - name: 安裝檢查工具
@@ -416,7 +416,7 @@ jobs:
         else\n  echo \"## ❌ 檢查結果: 拒絕\" >> pre-deploy-report.md\n  echo \"⚠️ 部署已被拒絕\"\
         \ >> pre-deploy-report.md\nfi\n\ncat pre-deploy-report.md\n"
     - name: 上傳檢查報告
-      uses: actions/upload-artifact@v4
+      uses: 65462800fd760344b1a7b4382951275a0abb4808
       with:
         name: pre-deploy-check-report
         path: pre-deploy-report.md
@@ -429,7 +429,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: 檢出代碼
-      uses: actions/checkout@v4
+      uses: 0ad4b8f3a27c304e21892351cbf9860471245599
     - name: 運行 Trivy 漏洞掃描
       uses: aquasecurity/trivy-action@master
       with:
@@ -450,7 +450,7 @@ jobs:
         else\n  echo \"## ❌ 安全掃描失敗\" >> container-security-report.md\n  echo \"⚠️\
         \ 無法生成掃描結果\" >> container-security-report.md\nfi\n\ncat container-security-report.md\n"
     - name: 上傳安全掃描報告
-      uses: actions/upload-artifact@v4
+      uses: 65462800fd760344b1a7b4382951275a0abb4808
       with:
         name: container-security-report
         path: container-security-report.md

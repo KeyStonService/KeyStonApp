@@ -108,9 +108,24 @@ directory_mapping:
     type: tool
   vocabulary_mapping:
     namespaces:
+<<<<<<< HEAD
       axiom-system: machinenativeops
       src/ai: src/ai
       unmanned-island: machinenativeops
+=======
+      "machinenativeops": "machinenativeops"
+      "unmanned-island": "machinenativeops"
+      "src/ai": "src/ai"
+
+    # 術語映射
+    terminology:
+      "executor": "engine"
+      "plugin": "module"
+      "handler": "processor"
+      "manager": "coordinator"
+
+    # 路徑映射
+>>>>>>> main
     paths:
       bin/: tools/
       lib/: shared/

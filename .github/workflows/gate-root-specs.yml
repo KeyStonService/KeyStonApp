@@ -25,11 +25,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: 📥 Checkout Repository
-      uses: actions/checkout@v4
+      uses: 0ad4b8f3a27c304e21892351cbf9860471245599
       with:
         fetch-depth: 0
     - name: 🐍 Setup Python
-      uses: actions/setup-python@v5
+      uses: 82c7e631bb3cdc910f68e0081d534527d238d7a7
       with:
         python-version: '3.11'
     - name: 📦 Install Dependencies
@@ -132,7 +132,7 @@ jobs:
         \ Validator\" >> $GITHUB_STEP_SUMMARY\nfi\n"
     - if: github.event_name == 'pull_request' && failure()
       name: 💬 Comment on PR
-      uses: actions/github-script@v7
+      uses: 60a0d83039c74a4aee543508d2ffcb1c3799cdea
       with:
         script: "const fs = require('fs');\nlet report = '## ❌ Root Specifications\
           \ Validation Failed\\n\\n';\n\nif (fs.existsSync('root-specs-validation-report.md'))\
@@ -144,7 +144,7 @@ jobs:
           \ repo: context.repo.repo,\n  body: report\n});\n"
     - if: always()
       name: 📤 Upload Validation Report
-      uses: actions/upload-artifact@v4
+      uses: 65462800fd760344b1a7b4382951275a0abb4808
       with:
         name: root-specs-validation-report
         path: root-specs-validation-report.md

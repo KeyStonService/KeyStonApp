@@ -39,7 +39,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: 下載所有報告
-      uses: actions/download-artifact@v4
+      uses: 6b208ae046db98c579e8a328f74b955651f427c0
       with:
         merge-multiple: true
     - name: 生成CI總結報告
@@ -67,7 +67,7 @@ jobs:
         \ >> ci-summary-report.md\n\ncat ci-summary-report.md\n"
     - if: failure() && github.event_name == 'pull_request'
       name: 評論PR（如果有失敗）
-      uses: actions/github-script@v7
+      uses: 60a0d83039c74a4aee543508d2ffcb1c3799cdea
       with:
         script: "const fs = require('fs');\n\nif (fs.existsSync('ci-summary-report.md'))\
           \ {\n  const report = fs.readFileSync('ci-summary-report.md', 'utf8');\n\
@@ -75,7 +75,7 @@ jobs:
           \    owner: context.repo.owner,\n    repo: context.repo.repo,\n    body:\
           \ report\n  });\n}\n"
     - name: 上傳總結報告
-      uses: actions/upload-artifact@v4
+      uses: 65462800fd760344b1a7b4382951275a0abb4808
       with:
         name: ci-summary-report
         path: ci-summary-report.md
@@ -85,16 +85,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: 檢出代碼
-      uses: actions/checkout@v4
+      uses: 0ad4b8f3a27c304e21892351cbf9860471245599
       with:
         fetch-depth: 0
     - name: 設置 Python 環境
-      uses: actions/setup-python@v5
+      uses: 82c7e631bb3cdc910f68e0081d534527d238d7a7
       with:
         cache: pip
         python-version: ${{ env.PYTHON_VERSION }}
     - name: 設置 Node.js 環境
-      uses: actions/setup-node@v4
+      uses: 1e60f620b9541d16bece96c5465dc8ee9832be0b
       with:
         cache: npm
         node-version: ${{ env.NODE_VERSION }}
@@ -163,7 +163,7 @@ jobs:
 
         '
     - name: 上傳品質報告
-      uses: actions/upload-artifact@v4
+      uses: 65462800fd760344b1a7b4382951275a0abb4808
       with:
         name: code-quality-report
         path: code-quality-report.md
@@ -193,9 +193,9 @@ jobs:
         - 6379:6379
     steps:
     - name: 檢出代碼
-      uses: actions/checkout@v4
+      uses: 0ad4b8f3a27c304e21892351cbf9860471245599
     - name: 設置 Python 環境
-      uses: actions/setup-python@v5
+      uses: 82c7e631bb3cdc910f68e0081d534527d238d7a7
       with:
         python-version: ${{ env.PYTHON_VERSION }}
     - name: 安裝集成測試依賴
@@ -232,7 +232,7 @@ jobs:
         \ncat integration-test-report.md\n"
     - if: always()
       name: 上傳集成測試報告
-      uses: actions/upload-artifact@v4
+      uses: 65462800fd760344b1a7b4382951275a0abb4808
       with:
         name: integration-test-results
         path: 'integration-test-report.md
@@ -247,9 +247,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: 檢出代碼
-      uses: actions/checkout@v4
+      uses: 0ad4b8f3a27c304e21892351cbf9860471245599
     - name: 設置 Python 環境
-      uses: actions/setup-python@v5
+      uses: 82c7e631bb3cdc910f68e0081d534527d238d7a7
       with:
         python-version: ${{ env.PYTHON_VERSION }}
     - name: 安裝安全掃描工具
@@ -320,7 +320,7 @@ jobs:
 
         '
     - name: 上傳安全報告
-      uses: actions/upload-artifact@v4
+      uses: 65462800fd760344b1a7b4382951275a0abb4808
       with:
         name: security-scan-report
         path: 'security-report.md
@@ -341,9 +341,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: 檢出代碼
-      uses: actions/checkout@v4
+      uses: 0ad4b8f3a27c304e21892351cbf9860471245599
     - name: 設置 Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v5
+      uses: 82c7e631bb3cdc910f68e0081d534527d238d7a7
       with:
         cache: pip
         python-version: ${{ matrix.python-version }}
@@ -379,7 +379,7 @@ jobs:
         fi\n\ncat test-report.md\n"
     - if: always()
       name: 上傳測試報告
-      uses: actions/upload-artifact@v4
+      uses: 65462800fd760344b1a7b4382951275a0abb4808
       with:
         name: test-results-${{ matrix.python-version }}
         path: 'test-report.md

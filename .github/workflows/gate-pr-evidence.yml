@@ -25,12 +25,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: 📥 檢出代碼
-      uses: actions/checkout@v4
+      uses: 0ad4b8f3a27c304e21892351cbf9860471245599
       with:
         fetch-depth: 0
     - id: validation
       name: 🔍 驗證四大核心證據
-      uses: actions/github-script@v7
+      uses: 60a0d83039c74a4aee543508d2ffcb1c3799cdea
       with:
         script: "const pr = context.payload.pull_request;\nconst body = (pr && pr.body)\
           \ ? pr.body : \"\";\nconst errors = [];\n\n// 允許大小寫、允許欄位前後空白\n// 1) repo:\
