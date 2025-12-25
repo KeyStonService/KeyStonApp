@@ -605,11 +605,11 @@ validation:
 # ============================================================================
 migration:
   legacy_namespaces:
-    - "machine-native-ops"
+    - "machine-native-ops-aaps"
     - "aaps"
     
   mapping:
-    "machine-native-ops": "machinenativeops"
+    "machine-native-ops-aaps": "machinenativeops"
     "aaps": "machinenativeops"
     
   deprecation_date: "2026-06-01"
