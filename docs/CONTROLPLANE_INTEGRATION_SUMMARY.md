@@ -148,6 +148,7 @@ git commit -m "Add file"
 #### 整合測試 (`tests/test_controlplane_integration.py`)
 
 **測試覆蓋**:
+
 - ✅ Python 配置庫 (7 tests)
 - ✅ CLI 工具 (6 tests)
 - ✅ Shell 庫 (3 tests)
