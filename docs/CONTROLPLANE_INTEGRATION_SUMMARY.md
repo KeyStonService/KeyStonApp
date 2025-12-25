@@ -246,6 +246,7 @@ git commit -m "Add file"
 
 ### 開發者體驗
 
+
 - **之前**: 需要手動讀取 YAML 文件
 - **之後**: 3 種便捷方式（CLI、Python、Shell）
 
