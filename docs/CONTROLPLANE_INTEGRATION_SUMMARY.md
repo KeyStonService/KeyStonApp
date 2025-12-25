@@ -35,6 +35,7 @@
 - ✅ Active 視圖合成
 
 #### Python 配置庫 (`lib/controlplane.py`)
+
 ```python
 from controlplane import ControlplaneConfig, get_config
 
