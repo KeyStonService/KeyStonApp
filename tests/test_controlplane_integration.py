@@ -77,6 +77,11 @@ class ControlplaneIntegrationTests:
             return False, "", f"Timeout: {str(e)}"
         except (OSError, subprocess.SubprocessError) as e:
             logger.error(f"Subprocess error running command '{cmd}': {e}", exc_info=True)
+        except subprocess.SubprocessError as e:
+            logger.error(f"Subprocess error running command '{cmd}': {e}", exc_info=True)
+            return False, "", str(e)
+        except OSError as e:
+            logger.error(f"OS error running command '{cmd}': {e}", exc_info=True)
             return False, "", str(e)
     
     def assert_true(self, condition, message):
@@ -134,6 +139,7 @@ class ControlplaneIntegrationTests:
             
         except (FileNotFoundError, RuntimeError, KeyError, AttributeError) as e:
             logger.error(f"Python library test failed with expected error: {e}", exc_info=True)
+            logger.error(f"Python library test failed: {e}", exc_info=True)
             self.assert_true(False, f"Python library test failed: {e}")
         except Exception as e:
             logger.error(f"Python library test failed with unexpected error: {e}", exc_info=True)
@@ -272,6 +278,7 @@ class ControlplaneIntegrationTests:
             
         except (FileNotFoundError, RuntimeError, KeyError, AttributeError) as e:
             logger.error(f"Configuration access failed with expected error: {e}", exc_info=True)
+            logger.error(f"Configuration access failed: {e}", exc_info=True)
             self.assert_true(False, f"Configuration access failed: {e}")
         except Exception as e:
             logger.error(f"Configuration access failed with unexpected error: {e}", exc_info=True)
@@ -301,6 +308,7 @@ class ControlplaneIntegrationTests:
             
         except (FileNotFoundError, RuntimeError, OSError, AttributeError) as e:
             logger.error(f"Overlay extension test failed with expected error: {e}", exc_info=True)
+            logger.error(f"Overlay extension test failed: {e}", exc_info=True)
             self.assert_true(False, f"Overlay extension test failed: {e}")
         except Exception as e:
             logger.error(f"Overlay extension test failed with unexpected error: {e}", exc_info=True)
@@ -325,6 +333,7 @@ class ControlplaneIntegrationTests:
             
         except (FileNotFoundError, RuntimeError, OSError, AttributeError) as e:
             logger.error(f"Active synthesis failed with expected error: {e}", exc_info=True)
+            logger.error(f"Active synthesis failed: {e}", exc_info=True)
             self.assert_true(False, f"Active synthesis failed: {e}")
         except Exception as e:
             logger.error(f"Active synthesis failed with unexpected error: {e}", exc_info=True)

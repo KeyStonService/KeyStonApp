@@ -60,6 +60,11 @@ cp_get_yaml_value() {
     local key_path="$2"
     local default_value="${3:-}"
     
+    if [[ -z "$yaml_file" || -z "$key_path" ]]; then
+        echo "$default_value"
+        return 1
+    fi
+    
     if [[ ! -f "$yaml_file" ]]; then
         echo "$default_value"
         return 1
@@ -77,12 +82,14 @@ cp_get_yaml_value() {
     
     # 回退到 Python
     if command -v python3 &> /dev/null; then
-        python3 -c "
-import yaml, sys
+        python3 - "$yaml_file" "$key_path" "$default_value" <<'PY'
+import sys
+import yaml
+
 try:
-    with open('$yaml_file', 'r') as f:
+    with open(sys.argv[1], 'r') as f:
         data = yaml.safe_load(f)
-    keys = '$key_path'.split('.')
+    keys = sys.argv[2].split('.')
     value = data
     for key in keys:
         if isinstance(value, dict):
@@ -90,10 +97,10 @@ try:
         else:
             value = None
             break
-    print(value if value is not None else '$default_value')
-except:
-    print('$default_value')
-"
+    print(value if value is not None else sys.argv[3])
+except Exception:
+    print(sys.argv[3])
+PY
         return 0
     fi
     
@@ -281,7 +288,14 @@ cp_synthesize_active() {
     
     # 複製 baseline 配置
     if [[ -d "$CP_BASELINE_PATH/config" ]]; then
-        cp -r "$CP_BASELINE_PATH/config/"*.yaml "$CP_ACTIVE_PATH/" 2>/dev/null || true
+        shopt -s nullglob
+        local yaml_files=("$CP_BASELINE_PATH"/config/*.yaml)
+        if ((${#yaml_files[@]} > 0)); then
+            cp -r "${yaml_files[@]}" "$CP_ACTIVE_PATH/"
+        else
+            cp_log_info "No baseline YAML config files found in $CP_BASELINE_PATH/config"
+        fi
+        shopt -u nullglob
     fi
     
     # TODO: 合併 overlay 配置 (需要更複雜的邏輯)
