@@ -31,6 +31,9 @@ LOCALHOST_ADDRESSES = ('127.0.0.1', 'localhost')
 # 預設配置 / Default configuration
 DEFAULT_HOST = '127.0.0.1'
 DEFAULT_PORT = 5000
+# 有效端口範圍 / Valid port range
+MIN_PORT = 1
+MAX_PORT = 65535
 
 class DashboardData:
     """儀表板數據管理"""
@@ -157,8 +160,8 @@ def download_report(filename):
         resolved_path = report_path.resolve()
         
         # Check that the resolved path is under the base directory
-        # Using relative_to() for validation - raises ValueError if path is outside base
-        _ = resolved_path.relative_to(base_path)  # Intentionally checking side effect
+        # Validate path is within base directory - raises ValueError if outside
+        _ = resolved_path.relative_to(base_path)
         
         # Ensure it's not the base directory itself and is a file
         if resolved_path == base_path or not resolved_path.is_file():
@@ -212,8 +215,8 @@ def main() -> None:
     # 驗證並解析端口
     try:
         port = int(os.environ.get('DASHBOARD_PORT', DEFAULT_PORT))
-        if not (1 <= port <= 65535):
-            print(f"⚠️  警告：端口 {port} 超出有效範圍 (1-65535)，使用預設值 {DEFAULT_PORT}")
+        if not (MIN_PORT <= port <= MAX_PORT):
+            print(f"⚠️  警告：端口 {port} 超出有效範圍 ({MIN_PORT}-{MAX_PORT})，使用預設值 {DEFAULT_PORT}")
             port = DEFAULT_PORT
     except (ValueError, TypeError):
         print(f"⚠️  警告：無效的 DASHBOARD_PORT 值，使用預設值 {DEFAULT_PORT}")
