@@ -5,7 +5,7 @@ apiVersion: machinenativeops.io/v2
 kind: Specification
 metadata:
   name: root-specs-context
-  namespace: machinenativenops
+  namespace: machinenativeops
   labels:
     machinenativeops.io/component: controlplane
     machinenativeops.io/layer: baseline
