@@ -177,7 +177,6 @@ def download_report(filename):
         
         # Prevent directory traversal by ensuring the resolved path is within REPORTS_DIR
         resolved_path.relative_to(base_path)
-        report_path.relative_to(base_path)
         # Validate path is within base directory - raises ValueError if outside
         _ = resolved_path.relative_to(base_path)
         
