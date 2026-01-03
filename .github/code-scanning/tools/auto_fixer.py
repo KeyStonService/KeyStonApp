@@ -81,6 +81,19 @@ class HardcodedPasswordFixer(VulnerabilityFixer):
                 r'(?P<lhs>\b(?P<var>\w*password\w*)\s*=\s*)["\'][^"\']+["\']',
                 _replace_password,
                 original_line
+                lhs = match.group(1)
+                var_name = match.group('var')
+                # 將變量名轉換為環境變量名，例如 api_password -> API_PASSWORD
+                env_name = re.sub(r'\W+', '_', var_name).upper()
+                if not env_name or env_name == '_':
+                    env_name = 'PASSWORD'
+                return f"{lhs}os.environ.get('{env_name}')"
+            
+            fixed_line = re.sub(
+                r'((?P<var>\w*password\w*)\s*=\s*)["\'][^"\']+["\']',
+                _replace_password,
+                original_line,
+                flags=re.IGNORECASE
             )
             
             # 檢查是否需要添加 import
