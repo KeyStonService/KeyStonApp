@@ -7,8 +7,10 @@ from datetime import datetime, timezone
 
 NAME_PATTERN = re.compile(r"^(dev|staging|prod)-[a-z0-9-]+-(deploy|svc|ing|cm|secret)-v\d+\.\d+\.\d+(-[A-Za-z0-9]+)?$")
 
+
 def now_iso():
     return datetime.now(timezone.utc).isoformat()
+
 
 def scan_k8s_yaml(root: Path):
     items = []
@@ -37,6 +39,7 @@ def scan_k8s_yaml(root: Path):
             })
     return items
 
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--root", required=True)
@@ -62,6 +65,7 @@ def main():
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"naming-discovery: out={out} compliance={report['summary']['compliance_rate']}%")
+
 
 if __name__ == "__main__":
     main()

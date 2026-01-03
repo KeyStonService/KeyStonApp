@@ -4,8 +4,10 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
+
 def now_iso():
     return datetime.now(timezone.utc).isoformat()
+
 
 def main():
     ap = argparse.ArgumentParser()
@@ -29,6 +31,7 @@ def main():
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"rollback: simulated out={out}")
+
 
 if __name__ == "__main__":
     main()

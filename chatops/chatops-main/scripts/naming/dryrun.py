@@ -5,8 +5,10 @@ import json
 from pathlib import Path
 from datetime import datetime, timezone
 
+
 def now_iso():
     return datetime.now(timezone.utc).isoformat()
+
 
 def main():
     ap = argparse.ArgumentParser()
@@ -42,6 +44,7 @@ def main():
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"naming-dryrun: out={out} changes={len(changes)}")
+
 
 if __name__ == "__main__":
     main()

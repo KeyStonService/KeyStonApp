@@ -9,13 +9,23 @@ from pathlib import Path
 
 NAME_PATTERN = re.compile(r"^(dev|staging|prod)-[a-z0-9-]+-(deploy|svc|ing|cm|secret)-v\d+\.\d+\.\d+(-[A-Za-z0-9]+)?$")
 
+
 def now_iso():
     return datetime.now(timezone.utc).isoformat()
+
 
 def discovery(root: Path):
     items = []
     if not root.exists():
-        return {"ts": now_iso(), "root": str(root), "resources": [], "summary": {"total": 0, "compliant": 0, "noncompliant": 0, "compliance_rate": 100.0}}
+        return {
+            "ts": now_iso(),
+            "root": str(root),
+            "resources": [],
+            "summary": {
+                "total": 0,
+                "compliant": 0,
+                "noncompliant": 0,
+                "compliance_rate": 100.0}}
     for p in root.rglob("*.y*ml"):
         try:
             text = p.read_text(encoding="utf-8")
@@ -42,6 +52,7 @@ def discovery(root: Path):
         "compliance_rate": round((compliant / total) * 100, 2) if total else 100.0,
     }
     return {"ts": now_iso(), "root": str(root), "resources": items, "summary": summary}
+
 
 class Handler(BaseHTTPRequestHandler):
     def _send(self, code: int, body: str, ctype: str = "application/json; charset=utf-8"):
@@ -80,15 +91,17 @@ class Handler(BaseHTTPRequestHandler):
 
         self._send(404, json.dumps({"error": "not found"}))
 
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--host", default="0.0.0.0")
+    ap.add_argument("--host", default=os.getenv("HOST", "127.0.0.1"))
     ap.add_argument("--port", type=int, default=int(os.getenv("PORT", "8080")))
     args = ap.parse_args()
 
     httpd = HTTPServer((args.host, args.port), Handler)
     print(f"engine-python listening on {args.host}:{args.port}")
     httpd.serve_forever()
+
 
 if __name__ == "__main__":
     main()

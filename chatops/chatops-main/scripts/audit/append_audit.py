@@ -5,8 +5,10 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 
+
 def now_iso():
     return datetime.now(timezone.utc).isoformat()
+
 
 def main():
     ap = argparse.ArgumentParser()
@@ -34,6 +36,7 @@ def main():
         f.write(json.dumps(rec, ensure_ascii=False) + "\n")
 
     print(f"audit: appended -> {out}")
+
 
 if __name__ == "__main__":
     main()
