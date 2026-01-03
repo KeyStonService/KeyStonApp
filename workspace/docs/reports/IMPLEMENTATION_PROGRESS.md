@@ -153,24 +153,24 @@ def execute(self, context: Dict[str, Any]) -> Any:
 
 #### 測試與質量
 
-1. ⏳ 識別所有高風險與關鍵路徑
+4. ⏳ 識別所有高風險與關鍵路徑
 2. ⏳ 驗證測試覆蓋率目標 (>85% 代碼, >90% 關鍵路徑)
 3. ⏳ 建立關鍵路徑 E2E 測試
 
 #### 架構與重構
 
-1. ⏳ 啟動 core/architecture-stability 解構分析
+7. ⏳ 啟動 core/architecture-stability 解構分析
 2. ⏳ 執行 P0 重構項目
 
 #### 監控與可觀測性
 
-1. ⏳ 確保監控覆蓋所有關鍵路徑
+9. ⏳ 確保監控覆蓋所有關鍵路徑
 2. ⏳ 定義關鍵指標與告警閾值
 3. ⏳ 實施關鍵指標自動追蹤
 
 #### CI/CD
 
-1. ⏳ 映射所有關鍵 CI jobs 依賴關係
+12. ⏳ 映射所有關鍵 CI jobs 依賴關係
 2. ⏳ 配置 critical hotspots 自動通知
 
 ### Phase 5-12 概要

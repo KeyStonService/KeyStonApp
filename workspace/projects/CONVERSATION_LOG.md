@@ -8,7 +8,8 @@
 ---
 
 <!-- AUTO-CONVERSATION-LOG:START -->
-### 2025-12-25T02:45:58Z - 自動記憶更新
+
+## 2025-12-25T02:45:58Z - 自動記憶更新
 
 - 目標: 記錄最新變更並同步治理文件
 - Commit: c82116af489eb36593d93694b1a6e13b4a862ce6 (chore: implement acceptance automation)

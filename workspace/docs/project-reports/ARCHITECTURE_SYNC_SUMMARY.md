@@ -41,16 +41,16 @@
 
 #### 註冊表文件（新增 2 個）
 
-1. `root.registry.devices.yaml` - 設備註冊表
+4. `root.registry.devices.yaml` - 設備註冊表
 2. `root.registry.namespaces.yaml` - 命名空間註冊表
 
 #### 配置文件（新增 1 個）
 
-1. `workspace.map.yaml` - 工作空間映射
+6. `workspace.map.yaml` - 工作空間映射
 
 #### 集成文件（新增 1 個）
 
-1. `root.integration.yaml` - 集成配置
+7. `root.integration.yaml` - 集成配置
 
 ### 3. 目錄結構更新 ✅
 

@@ -293,14 +293,14 @@ tools/scripts/validate-pr351-consistency.sh
 
 ### Documentation Files
 
-1. `README.md` - Added security enhancements section
+4. `README.md` - Added security enhancements section
 2. `governance/10-policy/README.md` - Added PR #351 security policies
 3. `docs/security/PR351_SECURITY_ENHANCEMENTS.md` - Added bilingual headers
 4. `core/contract_service/contracts-L1/contracts/src/services/README.md` - Added security documentation
 
 ### Validation Scripts
 
-1. `tools/scripts/consistency-audit.sh` - New: Initial audit script
+8. `tools/scripts/consistency-audit.sh` - New: Initial audit script
 2. `tools/scripts/validate-pr351-consistency.sh` - New: Comprehensive validation
 3. `docs/reports/PR351_CONSISTENCY_AUDIT.md` - New: Audit report
 4. `docs/reports/PR351_FINAL_CONSISTENCY_REPORT.md` - New: This file
