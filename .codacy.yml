@@ -18,7 +18,9 @@ exclude_paths:
 engines:
   bandit:
     exclude_paths:
-      - "workspace/src/autonomous/agents/**"
+      - "workspace/src/autonomous/agents/examples/**"
+      - "workspace/src/autonomous/agents/tests/**"
+      - "workspace/src/autonomous/agents/test-vectors/**"
       - "**/tests/**"
       - "**/examples/**"
   
@@ -29,6 +31,15 @@ engines:
   markdownlint:
     enabled: true
 
-# Disable duplicate code detection for now (3 duplications mentioned)
+# Configure duplicate code detection with reasonable thresholds
 duplication:
-  enabled: false
+  enabled: true
+  config:
+    # Set minimum tokens to 50 (default is 25) to reduce false positives
+    minTokens: 50
+    # Ignore duplications in test files
+    exclude:
+      - "**/tests/**"
+      - "**/test_*.py"
+      - "**/*_test.py"
+      - "**/examples/**"
