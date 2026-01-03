@@ -7,7 +7,7 @@ import os
 import json
 import time
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
 from enum import Enum
@@ -139,6 +139,7 @@ class CIMonitorDashboard:
                 runs = workflow.get_runs(per_page=10)
                 
                 for run in runs:
+                    run_started_at = getattr(run, "run_started_at", None)
                     workflow_data = {
                         'id': run.id,
                         'name': workflow.name,
@@ -147,7 +148,7 @@ class CIMonitorDashboard:
                         'created_at': run.created_at,
                          'updated_at': run.updated_at,
                          'duration': (run.updated_at - run.created_at).total_seconds() if run.updated_at and run.created_at else 0,
-                         'queue_time': (run.run_started_at - run.created_at).total_seconds() if getattr(run, "run_started_at", None) and run.created_at else 0,
+                         'queue_time': (run_started_at - run.created_at).total_seconds() if run_started_at and run.created_at else 0,
                          'head_branch': run.head_branch,
                          'head_sha': run.head_sha,
                          'triggered_by': run.triggered_by,
@@ -460,8 +461,9 @@ class CIMonitorDashboard:
             
             # 計算總覽指標
             if metrics:
+                current_time = datetime.now(timezone.utc)
                 # 計算成功率（過去7天）
-                seven_days_ago = datetime.now() - timedelta(days=7)
+                seven_days_ago = current_time - timedelta(days=7)
                 recent_metrics = [m for m in metrics if m.timestamp > seven_days_ago]
                 
                 success_count = sum(1 for m in recent_metrics if m.status == PipelineStatus.SUCCESS)
@@ -478,11 +480,11 @@ class CIMonitorDashboard:
                 security_issues = sum(m.security_issues for m in metrics)
                 
                 # 計算本月組織指標
-                month_ago = datetime.now() - timedelta(days=30)
+                month_ago = current_time - timedelta(days=30)
                 monthly_metrics = [m for m in metrics if m.timestamp > month_ago]
                 total_monthly = len(monthly_metrics)
                 avg_runtime_month = (sum(m.duration for m in monthly_metrics) / total_monthly) if total_monthly else 0
-                queue_times = [m.queue_time for m in monthly_metrics if m.queue_time is not None]
+                queue_times = [m.queue_time for m in monthly_metrics]
                 avg_queue_month = (sum(queue_times) / len(queue_times)) if queue_times else 0
                 failure_count_month = sum(1 for m in monthly_metrics if m.status == PipelineStatus.FAILURE)
                 failure_rate_month = (failure_count_month / total_monthly * 100) if total_monthly else 0
