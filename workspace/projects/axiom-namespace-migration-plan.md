@@ -231,7 +231,7 @@ docs/migration/
 
 ### ✅ 技術標準
 
-- [ ] 所有配置文件符合 MachineNativeOps MachineNativeOps 標準
+- [ ] 所有配置文件符合 MachineNativeOps 標準
 - [ ] 無遺留的舊命名空間引用
 - [ ] 系統功能完整性保持
 - [ ] 性能無顯著下降
@@ -272,5 +272,5 @@ docs/migration/
 
 *最後更新: 2025-12-22*  
 *版本: v2.0*  
-*適用範圍: MachineNativeOps MachineNativeOps 全平台*  
+*適用範圍: MachineNativeOps 全平台*  
 *狀態: 持續維護與升級中*
