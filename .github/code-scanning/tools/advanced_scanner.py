@@ -200,13 +200,14 @@ class AdvancedCodeScanner:
                 continue
             
             try:
+                
                 with open(file_path, 'r', encoding='utf-8') as f:
                     lines = f.readlines()
                 
                 for line_num, line in enumerate(lines, 1):
                     line_stripped = line.strip()
                     
-                    # 跳過註釋
+                    # 跳過註釋 (Skip comment lines)
                     if line_stripped.startswith("#"):
                         continue
                     
