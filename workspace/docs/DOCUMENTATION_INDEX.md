@@ -779,6 +779,14 @@ CLI 工具與腳本文檔。
 | [docs/DISASTER_RECOVERY.md](./docs/DISASTER_RECOVERY.md)         | 災難恢復          | 恢復流程              |
 | [docs/EFFICIENCY_METRICS.md](./docs/EFFICIENCY_METRICS.md)       | 效率指標          | 性能指標              |
 
+### 開發者指南 (`docs/guides/`) ⭐ **NEW**
+
+| 文件路徑                                                         | 說明              | 操作指引              |
+| ---------------------------------------------------------------- | ----------------- | --------------------- |
+| [docs/guides/git-advanced-commands.md](./docs/guides/git-advanced-commands.md) ⭐ | Git 高級命令指南 | git stash、git cherry-pick、git revert、git reset 詳解與範例 |
+| [docs/guides/best-practices.md](./docs/guides/best-practices.md) | 最佳實踐指南 | 多租戶管理、任務執行、依賴管理最佳實踐 |
+| [docs/guides/troubleshooting.md](./docs/guides/troubleshooting.md) | 疑難排解指南 | 常見問題與解決方案 |
+
 ### 進階功能文檔
 
 | 文件路徑                                                                                   | 說明              | 操作指引         |
