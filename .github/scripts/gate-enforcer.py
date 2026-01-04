@@ -19,7 +19,6 @@ import json
 import subprocess
 from pathlib import Path
 from dataclasses import dataclass, field
-from typing import Optional
 from enum import Enum
 
 
