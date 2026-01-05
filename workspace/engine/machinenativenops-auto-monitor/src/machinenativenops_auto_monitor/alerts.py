@@ -2,8 +2,7 @@
 MachineNativeOps Auto-Monitor - Alert Management
 警報管理模組
 
-Manages alert rules, evaluation, and notification delivery.
-Handles alert rules, alert generation, and alert routing for MachineNativeOps monitoring.
+Manages alert rules, evaluation, generation, and notification routing for MachineNativeOps monitoring.
 """
 
 import logging
@@ -209,8 +208,6 @@ class AlertManager:
             self.active_alerts.remove(alert)
         
         logger.info(f"Cleared {len(resolved)} resolved alerts")
-            'resolved_at': self.resolved_at.isoformat() if self.resolved_at else None
-        }
 
 
 @dataclass

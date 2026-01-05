@@ -47,57 +47,30 @@ All damaged files show evidence of **incomplete merge conflict resolution** with
 
 ## Files Partially Fixed (Commit: 3f022d1, 8e26e54)
 
-The following files in the auto-monitor module have been **partially fixed** in this PR:
+The following files in the auto-monitor module have been **partially fixed** in this PR. Some duplicate code and imports have been removed, but additional review is recommended:
 
 ### 1. `workspace/engine/machinenativenops-auto-monitor/src/machinenativenops_auto_monitor/__main__.py`
 - **Previous Error**: `SyntaxError: unterminated triple-quoted string literal (line 419)`
-- **Status**: ⚠️ May still contain issues - requires testing
+- **Fix Applied**: Removed duplicate Examples section and shebang line
+- **Status**: ⚠️ Partially Fixed - May require additional testing
 - **Impact**: Non-critical (experimental module in workspace/engine/)
 
 ### 2. `workspace/engine/machinenativenops-auto-monitor/src/machinenativenops_auto_monitor/alerts.py`
 - **Previous Error**: `SyntaxError: invalid syntax (line 35)` - Multiple duplicate Alert/AlertSeverity class definitions
 - **Fix Applied**: Removed duplicate imports (lines 28-44) and consolidated class definitions
-- **Status**: ✅ Fixed in this PR - duplicate imports and classes removed
+- **Status**: ⚠️ Partially Fixed - Duplicate code removed, orphaned fragments may remain
 - **Impact**: Non-critical (experimental module)
 
 ### 3. `workspace/engine/machinenativenops-auto-monitor/src/machinenativenops_auto_monitor/app.py`
 - **Previous Error**: `IndentationError: unexpected indent (line 28)` - Incomplete class docstring
 - **Fix Applied**: Completed the AutoMonitorApp class docstring
-- **Status**: ✅ Fixed in this PR - docstring completed
+- **Status**: ⚠️ Partially Fixed - Docstring completed, may have other issues
 - **Impact**: Non-critical (experimental module)
 
 ### 4. `workspace/engine/machinenativenops-auto-monitor/src/machinenativenops_auto_monitor/collectors.py`
 - **Previous Error**: `SyntaxError: unterminated triple-quoted string literal (line 1072)` - Duplicate imports
 - **Fix Applied**: Consolidated duplicate import statements (lines 11-24)
-- **Status**: ✅ Fixed in this PR - duplicate imports removed
-The following files in the auto-monitor module had duplicate code removed but **still have syntax errors** requiring additional work:
-
-### 7. `workspace/engine/machinenativenops-auto-monitor/src/machinenativenops_auto_monitor/__main__.py`
-- **Original Issue**: Duplicate code and unterminated string literals
-- **Partial Fix Applied**: Removed duplicate Examples section and shebang line
-- **Current Error**: `SyntaxError: unterminated triple-quoted string literal (line 419)`
-- **Status**: ⚠️ Partially Fixed - Still has syntax errors
-- **Impact**: Non-critical (experimental module in workspace/engine/)
-
-### 8. `workspace/engine/machinenativenops-auto-monitor/src/machinenativenops_auto_monitor/alerts.py`
-- **Original Issue**: Multiple duplicate Alert/AlertSeverity class definitions
-- **Partial Fix Applied**: Removed duplicate module docstring
-- **Current Error**: `SyntaxError: invalid syntax (line 35)`
-- **Status**: ⚠️ Partially Fixed - Still has syntax errors
-- **Impact**: Non-critical (experimental module)
-
-### 9. `workspace/engine/machinenativenops-auto-monitor/src/machinenativenops_auto_monitor/app.py`
-- **Original Issue**: Indentation corruption and duplicate code
-- **Partial Fix Applied**: Fixed docstring formatting and indentation
-- **Current Error**: `SyntaxError: invalid syntax (line 176)`
-- **Status**: ⚠️ Partially Fixed - Still has syntax errors
-- **Impact**: Non-critical (experimental module)
-
-### 10. `workspace/engine/machinenativenops-auto-monitor/src/machinenativenops_auto_monitor/collectors.py`
-- **Original Issue**: Duplicate code and unterminated string literals
-- **Partial Fix Applied**: Removed duplicate module docstring
-- **Current Error**: `SyntaxError: unterminated triple-quoted string literal (line 1072)`
-- **Status**: ⚠️ Partially Fixed - Still has syntax errors
+- **Status**: ⚠️ Partially Fixed - Duplicate imports removed, validation recommended
 - **Impact**: Non-critical (experimental module)
 
 ## Recommendations
