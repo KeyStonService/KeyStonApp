@@ -27,6 +27,7 @@ MachineNativeOps/
 ├── root.fs.map                   # 系統層級目錄映射
 └── root.env.sh                   # Root 使用者殼層環境
 ```
+> `controlplane/config` 在運行時維持唯讀，所有 root.* 配置（含 devices/kernel 映射）均透過 CI/CD 或受控變更流程更新，以避免散落的映射破壞治理一致性。
 
 ### 標準 FHS 目錄
 ```
