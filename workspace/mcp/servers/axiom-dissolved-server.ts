@@ -1257,17 +1257,30 @@ const DISSOLVED_PROMPTS: PromptDefinition[] = [
 
 // Constants for quantum execution simulation
 const DEFAULT_BACKEND_AVAILABILITY = 0.70;
+const LOCAL_SIMULATOR_AVAILABILITY = 0.99;
+const IBM_QUANTUM_AVAILABILITY = 0.80;
+const AWS_BRAKET_AVAILABILITY = 0.85;
+const AZURE_QUANTUM_AVAILABILITY = 0.82;
+const IBM_BRISBANE_AVAILABILITY = 0.75;
+
 const VQE_QUANTUM_GROUND_STATE = -1.137;
 const VQE_CLASSICAL_GROUND_STATE = -1.135;
 const VQE_QUANTUM_PRECISION = 0.01;
 const VQE_CLASSICAL_PRECISION = 0.02;
+
 const MIN_QUANTUM_FIDELITY = 0.95;
 const MAX_QUANTUM_FIDELITY = 0.99;
 const MIN_CLASSICAL_QUALITY = 0.85;
 const MAX_CLASSICAL_QUALITY = 0.95;
 
+const QUANTUM_EXEC_MIN_DELAY_MS = 10;
+const QUANTUM_EXEC_MAX_DELAY_MS = 50;
+const CLASSICAL_EXEC_MIN_DELAY_MS = 5;
+const CLASSICAL_EXEC_MAX_DELAY_MS = 20;
+
 /**
  * Tool category for execution routing
+ * Order matters: more specific categories should be checked first
  */
 enum ToolCategory {
   VQE = "vqe",
@@ -1280,14 +1293,18 @@ enum ToolCategory {
 
 /**
  * Get tool category from tool name
+ * Checks categories in order of specificity to avoid misclassification
  */
 function getToolCategory(toolName: string): ToolCategory {
   const name = toolName.toLowerCase();
+  
+  // Check most specific categories first to avoid substring matches
   if (name.includes("vqe")) return ToolCategory.VQE;
   if (name.includes("qaoa")) return ToolCategory.QAOA;
   if (name.includes("portfolio")) return ToolCategory.PORTFOLIO;
   if (name.includes("financial")) return ToolCategory.FINANCIAL;
   if (name.includes("optimization")) return ToolCategory.OPTIMIZATION;
+  
   return ToolCategory.GENERIC;
 }
 
@@ -1451,12 +1468,13 @@ async function executeClassicalTool(
  */
 function checkQuantumBackendAvailability(backendType: string): boolean {
   // Simulate backend availability with realistic failure scenarios
+  // These constants represent typical availability rates for quantum computing services
   const availabilityMap: Record<string, number> = {
-    local_simulator: 0.99, // Almost always available
-    ibm_quantum: 0.80,     // Real QPUs have queues and downtime
-    aws_braket: 0.85,
-    azure_quantum: 0.82,
-    ibm_brisbane: 0.75,    // Specific backend may be in maintenance
+    local_simulator: LOCAL_SIMULATOR_AVAILABILITY,  // Almost always available
+    ibm_quantum: IBM_QUANTUM_AVAILABILITY,          // Real QPUs have queues and downtime
+    aws_braket: AWS_BRAKET_AVAILABILITY,
+    azure_quantum: AZURE_QUANTUM_AVAILABILITY,
+    ibm_brisbane: IBM_BRISBANE_AVAILABILITY,        // Specific backend may be in maintenance
   };
   
   const availability = availabilityMap[backendType] ?? DEFAULT_BACKEND_AVAILABILITY;
@@ -1470,8 +1488,10 @@ async function simulateQuantumExecution(
   toolName: string,
   args: Record<string, unknown>
 ): Promise<unknown> {
-  // Simulate computation time
-  await new Promise((resolve) => setTimeout(resolve, 10 + Math.random() * 50));
+  // Simulate computation time for quantum execution
+  await new Promise((resolve) => 
+    setTimeout(resolve, QUANTUM_EXEC_MIN_DELAY_MS + Math.random() * (QUANTUM_EXEC_MAX_DELAY_MS - QUANTUM_EXEC_MIN_DELAY_MS))
+  );
   
   // Return tool-specific simulated results based on tool category
   // Real implementation would execute actual quantum circuits
@@ -1515,8 +1535,10 @@ async function simulateClassicalExecution(
   toolName: string,
   args: Record<string, unknown>
 ): Promise<unknown> {
-  // Simulate computation time (usually faster than quantum for small problems)
-  await new Promise((resolve) => setTimeout(resolve, 5 + Math.random() * 20));
+  // Simulate computation time for classical execution (usually faster than quantum for small problems)
+  await new Promise((resolve) => 
+    setTimeout(resolve, CLASSICAL_EXEC_MIN_DELAY_MS + Math.random() * (CLASSICAL_EXEC_MAX_DELAY_MS - CLASSICAL_EXEC_MIN_DELAY_MS))
+  );
   
   // Return tool-specific classical results based on tool category
   const category = getToolCategory(toolName);
