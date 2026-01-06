@@ -100,7 +100,7 @@ class MAPEKLoop:
         self._planners: List[Callable] = []
         self._executors: List[Callable] = []
         self._running = False
-        self.logger = logging.getLogger(f"{__name__}.MAPEKLoop")
+        self.logger = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
 
     async def start(self) -> None:
         """Start the MAPE-K loop."""
@@ -181,7 +181,8 @@ class MAPEKLoop:
                         break  # One plan per anomaly
                 except Exception as e:
                     # Log planner failure but try next planner for this anomaly
-                    self.logger.warning(f"Planner failed for anomaly {anomaly.id}: {e}", exc_info=True)
+                    anomaly_id = getattr(anomaly, 'id', 'unknown')
+                    self.logger.warning(f"Planner failed for anomaly {anomaly_id}: {e}", exc_info=True)
         return plans
 
     async def _execute(self, plans: List[RemediationPlan]) -> List[ExecutionResult]:
@@ -199,7 +200,8 @@ class MAPEKLoop:
                     break
                 except Exception as e:
                     # Log executor failure and record in results
-                    self.logger.warning(f"Executor failed for plan {plan.id}: {e}", exc_info=True)
+                    plan_id = getattr(plan, 'id', 'unknown')
+                    self.logger.warning(f"Executor failed for plan {plan_id}: {e}", exc_info=True)
                     results.append(ExecutionResult(
                         plan_id=plan.id,
                         success=False,
