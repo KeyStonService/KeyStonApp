@@ -9,7 +9,6 @@ MachineNativeOps 專案深度分析工具
 
 import argparse
 import json
-import os
 import sys
 import threading
 from datetime import datetime
