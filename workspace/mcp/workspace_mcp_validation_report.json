@@ -7,6 +7,7 @@
     "analyzer_version": "3.0.0",
     "quantum_enabled": true
   },
+  "timestamp": "2026-01-06T23:06:08.132219Z",
   "timestamp": "2026-01-06T23:12:01.353060Z",
   "analysis_scope": "entire",
   "quantum_metrics": {
@@ -19,6 +20,21 @@
     "results": {
       "VQE": {
         "algo": "VQE",
+        "energy": -1.3715886758413813,
+        "fidelity": 0.9975843423938281
+      },
+      "QAOA": {
+        "algo": "QAOA",
+        "opt": 0.4936063703748478,
+        "fidelity": 0.9671377030950392
+      },
+      "QML": {
+        "algo": "QML",
+        "acc": 0.9276394981725518,
+        "fidelity": 0.9890222069252883
+      }
+    },
+    "average_fidelity": 0.9845814174713853
         "energy": -0.7453573265003,
         "fidelity": 0.9689327615888055
       },
@@ -254,6 +270,7 @@
         "valid": true,
         "errors": [],
         "warnings": [],
+        "line_count": 776
         "line_count": 775
       },
       {
@@ -285,6 +302,7 @@
       {
         "file": "workspace/mcp/workspace_mcp_validation_report.md",
         "valid": true,
+        "line_count": 124
         "line_count": 139
       },
       {
