@@ -87,6 +87,7 @@ class GeneticOptimizer:
         self._initialize_population()
 
         fitness_history = []
+        generations_completed = 0
 
         for generation in range(self.config.generations):
             # Evaluate fitness
@@ -95,6 +96,8 @@ class GeneticOptimizer:
             # Record best fitness
             best = max(self._population, key=lambda i: i.fitness)
             fitness_history.append(best.fitness)
+
+            generations_completed = generation + 1
 
             # Check for convergence
             if generation > 10 and self._check_convergence(fitness_history[-10:]):
@@ -110,7 +113,7 @@ class GeneticOptimizer:
         return OptimizationResult(
             best_individual=best,
             best_fitness=best.fitness,
-            generations_run=generation + 1,
+            generations_run=generations_completed,
             fitness_history=fitness_history,
             final_population=self._population,
         )
@@ -235,11 +238,24 @@ class GeneticOptimizer:
                 individual.genes[gene] = max(min_val, min(max_val, new_value))
 
     def _check_convergence(self, recent_fitness: List[float]) -> bool:
-        """Check if optimization has converged."""
-        if len(recent_fitness) < 2:
+        """Check if optimization has converged.
+        
+        Args:
+            recent_fitness: List of recent fitness values
+            
+        Returns:
+            True if variance is below threshold, False otherwise
+        """
+        # Ensure we have sufficient data points for meaningful variance calculation
+        if not recent_fitness or len(recent_fitness) < 2:
             return False
-        variance = sum((f - sum(recent_fitness)/len(recent_fitness))**2
-                       for f in recent_fitness) / len(recent_fitness)
+        
+        # Calculate mean once for efficiency
+        mean = sum(recent_fitness) / len(recent_fitness)
+        
+        # Calculate variance
+        variance = sum((f - mean) ** 2 for f in recent_fitness) / len(recent_fitness)
+        
         return variance < 1e-6
 
 
