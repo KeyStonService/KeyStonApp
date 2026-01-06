@@ -1459,10 +1459,10 @@ function buildToolResult(
 ): Record<string, unknown> {
   return {
     tool: toolName,
-    source_module: sourceModule,
+    sourceModule: sourceModule,
     args,
-    execution_timestamp: new Date().toISOString(),
-    quantum_executed: quantumExecuted,
+    executionTimestamp: new Date().toISOString(),
+    quantumExecuted: quantumExecuted,
     ...additionalData,
   };
 }
@@ -1473,13 +1473,13 @@ function buildToolResult(
 async function executeDissolvedTool(
   toolName: string,
   args: Record<string, unknown>
-): Promise<{ success: boolean; result: unknown; execution_method?: string; error_type?: string }> {
+): Promise<{ success: boolean; result: unknown; executionMethod?: string; errorType?: string }> {
   const tool = DISSOLVED_TOOLS.find((t) => t.name === toolName);
   if (!tool) {
     return { 
       success: false, 
       result: { error: `Unknown tool: ${toolName}` },
-      error_type: "tool_not_found",
+      errorType: "tool_not_found",
     };
   }
 
@@ -1492,7 +1492,7 @@ async function executeDissolvedTool(
       result: {
         error: `Validation failed: ${error instanceof Error ? error.message : String(error)}`,
       },
-      error_type: "validation_error",
+      errorType: "validation_error",
     };
   }
 
@@ -1504,7 +1504,7 @@ async function executeDissolvedTool(
       return {
         success: true,
         result: buildToolResult(toolName, tool.sourceModule, args, true, quantumResult),
-        execution_method: "quantum",
+        executionMethod: "quantum",
       };
     } catch (error) {
       // Log the quantum execution failure for debugging
@@ -1514,9 +1514,9 @@ async function executeDissolvedTool(
           tool: toolName,
           sourceModule: tool.sourceModule,
           args,
-          execution_timestamp: new Date().toISOString(),
-          quantum_executed: true,
-          execution_method: "quantum",
+          executionTimestamp: new Date().toISOString(),
+          quantumExecuted: true,
+          executionMethod: "quantum",
           error: error instanceof Error ? error.message : String(error),
           timestamp: new Date().toISOString(),
         }
@@ -1532,11 +1532,11 @@ async function executeDissolvedTool(
       return {
         success: true,
         result: buildToolResult(toolName, tool.sourceModule, args, false, {
-          fallback_used: true,
-          fallback_reason: error instanceof Error ? error.message : "Quantum execution failed",
+          fallbackUsed: true,
+          fallbackReason: error instanceof Error ? error.message : "Quantum execution failed",
           ...classicalResult,
         }),
-        execution_method: "classical_fallback",
+        executionMethod: "classical_fallback",
       };
     }
   }
@@ -1549,7 +1549,7 @@ async function executeDissolvedTool(
       return {
         success: true,
         result: buildToolResult(toolName, tool.sourceModule, args, true, quantumResult),
-        execution_method: "quantum",
+        executionMethod: "quantum",
       };
     } catch (error) {
       return {
@@ -1559,10 +1559,10 @@ async function executeDissolvedTool(
           tool: toolName,
           sourceModule: tool.sourceModule,
           args,
-          execution_timestamp: new Date().toISOString(),
-          quantum_executed: false,
-          fallback_used: true,
-          error_message: error instanceof Error ? error.message : String(error),
+          executionTimestamp: new Date().toISOString(),
+          quantumExecuted: false,
+          fallbackUsed: true,
+          errorMessage: error instanceof Error ? error.message : String(error),
         },
       };
     }
@@ -1573,7 +1573,7 @@ async function executeDissolvedTool(
   return {
     success: true,
     result: buildToolResult(toolName, tool.sourceModule, args, false, classicalResult),
-    execution_method: "classical",
+    executionMethod: "classical",
   };
 }
 
@@ -1871,8 +1871,6 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
   }
   
   const tools = DISSOLVED_TOOLS.filter((t) => {
-    const layerMatch = t.sourceModule.match(/L(\d{2})/);
-    const resourceLayerMatch = layerId?.match(/l(\d{2})/);
     const layerMatch = t.sourceModule.match(/L(\d{2})/);
     const resourceLayerMatch = layerId.match(/l(\d{2})/);
     return layerMatch && resourceLayerMatch && layerMatch[1] === resourceLayerMatch[1];
