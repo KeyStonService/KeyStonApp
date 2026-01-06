@@ -127,7 +127,10 @@ class GitHubProjectAnalyzer:
             "module_relationships": {
                 "core": {"dependencies": ["utils", "config"], "dependents": ["api", "services"]},
                 "api": {"dependencies": ["core", "auth"], "dependents": ["gateway", "clients"]},
-                "services": {"dependencies": ["core", "db"], "dependents": ["workers", "schedulers"]},
+                "services": {
+                    "dependencies": ["core", "db"],
+                    "dependents": ["workers", "schedulers"],
+                },
             },
             "scalability_considerations": [
                 "Horizontal scaling supported through Kubernetes",
@@ -169,11 +172,19 @@ class GitHubProjectAnalyzer:
 
         # Placeholder performance metrics; replace with observability data when available.
         performance_metrics = {
-                "latency": {"current": "15ms", "p95": "15ms", "target": "<20ms", "status": "met"},
-                "throughput": {"current": "50k rpm", "target": "100k rpm", "status": "partial"},
-                "availability": {"current": "99.95%", "target": "99.99%", "status": "met"},
-                "error_rate": {"current": "0.1%", "target": "<0.05%", "status": "needs_improvement"},
-            } if self.config.include_metrics else {}
+            "latency": {
+                "current": "15ms", "p95": "15ms", "target": "<20ms", "status": "met"
+            },
+            "throughput": {
+                "current": "50k rpm", "target": "100k rpm", "status": "partial"
+            },
+            "availability": {
+                "current": "99.95%", "target": "99.99%", "status": "met"
+            },
+            "error_rate": {
+                "current": "0.1%", "target": "<0.05%", "status": "needs_improvement"
+            },
+        } if self.config.include_metrics else {}
 
         return {
             "core_features": features if self.config.include_code_samples else [],
@@ -304,7 +315,10 @@ class GitHubProjectAnalyzer:
             },
             "testing_strategy": {
                 "test_levels": ["unit", "integration", "e2e", "performance"],
-                "coverage": {"unit": "75%", "integration": "60%", "e2e": "45%", "performance": "30%"},
+                "coverage": {
+                    "unit": "75%", "integration": "60%",
+                    "e2e": "45%", "performance": "30%"
+                },
                 "automation_level": "high",
                 "improvement_opportunities": [
                     "Add chaos engineering tests",
@@ -512,7 +526,8 @@ class GitHubProjectAnalyzer:
                 current_value = data["p95"]
             status = data.get("status", "")
             status_emoji = "✅" if status == "met" else "⚠️" if status == "partial" else "❌"
-            result += f"| {metric} | {current_value or ''} | {data.get('target', '')} | {status_emoji} |\n"
+            target_val = data.get('target', '')
+            result += f"| {metric} | {current_value or ''} | {target_val} | {status_emoji} |\n"
         return result
 
     def _format_todo_list(self, todos: List[Dict[str, Any]]) -> str:
@@ -526,7 +541,13 @@ class GitHubProjectAnalyzer:
     def _format_issues(self, issues: List[Dict[str, Any]]) -> str:
         result = ""
         for issue in issues:
-            severity_emoji = "🔴" if issue["severity"] == "high" else "🟡" if issue["severity"] == "medium" else "🟢"
+            severity = issue["severity"]
+            if severity == "high":
+                severity_emoji = "🔴"
+            elif severity == "medium":
+                severity_emoji = "🟡"
+            else:
+                severity_emoji = "🟢"
             result += f"- {severity_emoji} **{issue['issue']}**\n"
             result += f"  - 影響組件: {', '.join(issue['affected_components'])}\n"
             result += f"  - 修復優先級: {issue['fix_priority']}\n"
@@ -599,7 +620,10 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--output", choices=["markdown", "json"], default="markdown")
     args = parser.parse_args()
     if not args.owner or not args.repo:
-        parser.error("Repository owner and name are required via --owner/--repo or environment variables.")
+        parser.error(
+            "Repository owner and name are required via --owner/--repo "
+            "or environment variables."
+        )
     return args
 
 
