@@ -16,7 +16,11 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
+import logging
 from typing import Any, Dict, List, Literal, Optional
+
+# Configure logging for pipeline loader
+logger = logging.getLogger(__name__)
 
 import yaml
 
@@ -29,13 +33,24 @@ SCHEMA_PATH = Path("workspace/mcp/schemas/unified-pipeline.schema.json")
 # INSTANT Execution Constants
 # ========================================
 class InstantExecutionStandards:
+    """Runtime constants for INSTANT execution mode validation.
+
+    Note on schema vs runtime constraints:
+    - The JSON schema allows maxParallelAgents up to 1024 to support future
+      scaling and non-INSTANT pipeline modes (Standard, Hybrid).
+    - For INSTANT-Autonomous mode, the runtime maximum is 256 agents.
+    - The schema's higher maximum provides flexibility for infrastructure
+      that may scale beyond current INSTANT requirements while maintaining
+      backward compatibility.
+    """
+
     MAX_LATENCY_INSTANT = 100       # ms
     MAX_LATENCY_FAST = 500          # ms
     MAX_LATENCY_STANDARD = 5000     # ms
     MAX_STAGE_LATENCY = 30000       # ms
     MAX_TOTAL_LATENCY = 180000      # ms (3 minutes)
     MIN_PARALLEL_AGENTS = 64
-    MAX_PARALLEL_AGENTS = 256
+    MAX_PARALLEL_AGENTS = 256       # Runtime max for INSTANT mode (schema allows 1024)
     HUMAN_INTERVENTION = 0
     SUCCESS_RATE_FEATURE = 95       # %
     SUCCESS_RATE_FIX = 90           # %
@@ -149,12 +164,26 @@ class InstantPipelineStage:
 
 @dataclass
 class InstantPipeline:
+    """INSTANT Pipeline requires zero human intervention.
+
+    The humanIntervention field must always be 0 for INSTANT-Autonomous mode
+    pipelines. This is enforced both at the type level (Literal[0]) and at
+    runtime via __post_init__ validation.
+    """
+
     name: str
     totalLatencyTarget: int
-    humanIntervention: int
+    humanIntervention: Literal[0]
     successRateTarget: float
     stages: List[InstantPipelineStage]
     description: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        if self.humanIntervention != 0:
+            raise ValueError(
+                f"InstantPipeline.humanIntervention must be 0 for INSTANT pipelines, "
+                f"got {self.humanIntervention!r}"
+            )
 
 
 # ========================================
@@ -210,11 +239,19 @@ class AutoHealing:
 # ========================================
 @dataclass
 class GovernanceValidationRule:
+    """Governance validation rule configuration.
+
+    The implementationStatus field indicates whether the validator script is
+    currently implemented or planned for future development. This helps
+    distinguish between active validators and aspirational configuration.
+    """
+
     standard: str
     validator: str
     checkInterval: int
     criteria: List[str]
     failureAction: str
+    implementationStatus: Optional[str] = None  # "implemented" or "planned"
 
 
 # ========================================
@@ -222,6 +259,15 @@ class GovernanceValidationRule:
 # ========================================
 @dataclass
 class PipelineLabels:
+    """Pipeline metadata labels.
+
+    Note: The TypeScript interface allows arbitrary additional properties via
+    index signatures ([key: string]: string | undefined), but this Python
+    dataclass is more restrictive and only accepts the defined fields.
+    Unknown fields will be filtered out with a warning during construction.
+    To handle arbitrary labels, consider using a TypedDict or Dict[str, str].
+    """
+
     tier: Optional[str] = None
     evolution: Optional[str] = None
     humanIntervention: Optional[str] = None
@@ -229,6 +275,15 @@ class PipelineLabels:
 
 @dataclass
 class PipelineAnnotations:
+    """Pipeline metadata annotations.
+
+    Note: The TypeScript interface allows arbitrary additional properties via
+    index signatures ([key: string]: string | undefined), but this Python
+    dataclass is more restrictive and only accepts the defined fields.
+    Unknown fields will be filtered out with a warning during construction.
+    To handle arbitrary annotations, consider using a TypedDict or Dict[str, str].
+    """
+
     philosophy: Optional[str] = None
     competitiveness: Optional[str] = None
     standard: Optional[str] = None
@@ -428,15 +483,35 @@ def load_schema(path: Path = SCHEMA_PATH) -> dict:
 
 
 def _safe_construct(cls, data: dict, label: str):
-    """Safely construct a dataclass, filtering out unknown fields."""
+    """Safely construct a dataclass, filtering out unknown fields.
+
+    Note: This function filters out fields not defined in the dataclass to allow
+    forward compatibility when new fields are added to YAML configs. A warning
+    is logged when fields are filtered to help detect potential typos in config.
+    """
     if data is None:
         raise ValueError(f"Cannot construct {label}: data is None")
 
     # Get valid field names for this dataclass
     valid_fields = {f.name for f in cls.__dataclass_fields__.values()}
 
-    # Filter data to only include valid fields
-    filtered_data = {k: v for k, v in data.items() if k in valid_fields}
+    # Filter data to only include valid fields and log filtered ones
+    filtered_data = {}
+    unknown_fields = []
+    for k, v in data.items():
+        if k in valid_fields:
+            filtered_data[k] = v
+        else:
+            unknown_fields.append(k)
+
+    if unknown_fields:
+        logger.warning(
+            "Ignoring unknown fields in %s for %s: %s. "
+            "These may be typos or fields from a newer config version.",
+            label,
+            cls.__name__,
+            unknown_fields,
+        )
 
     try:
         return cls(**filtered_data)
@@ -465,7 +540,26 @@ def is_v3_pipeline(manifest: UnifiedPipelineManifest) -> bool:
 
 
 def validate_latency_compliance(manifest: UnifiedPipelineManifest) -> bool:
-    """Validate that all latencies are within INSTANT execution standards."""
+    """Validate that configured latency thresholds comply with INSTANT standards.
+
+    This function validates that the manifest's latency thresholds are configured
+    to be equal to or stricter than the INSTANT execution standards. A threshold
+    is compliant if it's at or below the corresponding standard maximum.
+
+    For example:
+    - If standard MAX_LATENCY_INSTANT is 100ms, a config with instant=50ms passes
+    - If standard MAX_LATENCY_INSTANT is 100ms, a config with instant=150ms fails
+
+    The intent is to ensure that no pipeline is configured with latency thresholds
+    that are more permissive than what INSTANT execution mode requires.
+
+    Args:
+        manifest: The loaded pipeline manifest to validate.
+
+    Returns:
+        True if all latency thresholds comply with INSTANT standards,
+        or True if no latency thresholds are configured.
+    """
     if not manifest.spec.latencyThresholds:
         return True
 
@@ -480,12 +574,37 @@ def validate_latency_compliance(manifest: UnifiedPipelineManifest) -> bool:
 
 
 def validate_parallelism(manifest: UnifiedPipelineManifest) -> bool:
-    """Validate that parallelism is within INSTANT execution standards."""
+    """Validate that parallelism is within INSTANT execution standards.
+
+    Validates both maxParallelAgents and minParallelAgents (if configured)
+    against the INSTANT execution standards.
+
+    Args:
+        manifest: The loaded pipeline manifest to validate.
+
+    Returns:
+        True if parallelism settings comply with INSTANT standards.
+    """
     scheduling = manifest.spec.coreScheduling
-    return (
+
+    # Validate maxParallelAgents is within allowed INSTANT range
+    max_ok = (
         scheduling.maxParallelAgents >= InstantExecutionStandards.MIN_PARALLEL_AGENTS
         and scheduling.maxParallelAgents <= InstantExecutionStandards.MAX_PARALLEL_AGENTS
     )
+
+    # Validate minParallelAgents when in INSTANT mode
+    # If minParallelAgents is not configured, we treat it as passing
+    if is_instant_mode(manifest):
+        min_parallel = scheduling.minParallelAgents
+        min_ok = (
+            min_parallel is None
+            or min_parallel >= InstantExecutionStandards.MIN_PARALLEL_AGENTS
+        )
+    else:
+        min_ok = True
+
+    return min_ok and max_ok
 
 
 __all__ = [
