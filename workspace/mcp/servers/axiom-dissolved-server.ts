@@ -1526,7 +1526,6 @@ async function executeDissolvedTool(
           execution_timestamp: new Date().toISOString(),
           quantum_executed: true,
           error: error instanceof Error ? error.message : String(error),
-          timestamp: new Date().toISOString(),
         }
       );
 
