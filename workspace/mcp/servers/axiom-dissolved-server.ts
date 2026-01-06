@@ -21,8 +21,6 @@ import {
   ErrorCode,
   McpError,
 } from "@modelcontextprotocol/sdk/types.js";
-import { DISSOLVED_TOOLS } from "./tools/index.js";
-import type { ToolDefinition, ResourceDefinition, PromptDefinition } from "./tools/types.js";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // EXTENDED PROMPT DEFINITION WITH TEMPLATE
@@ -1584,6 +1582,8 @@ async function executeDissolvedTool(
     }
   }
 
+  // For quantum-only tools (no fallback)
+  if (tool.quantumEnabled) {
   // For tools without fallback or non-quantum tools
   if (tool.quantumEnabled) {
     // Quantum-only tools (no fallback)
@@ -1612,6 +1612,7 @@ async function executeDissolvedTool(
           errorMessage: error instanceof Error ? error.message : String(error),
           error_message: error instanceof Error ? error.message : String(error),
         },
+        error_type: "quantum_execution_failed",
       };
     }
   }
@@ -1620,6 +1621,8 @@ async function executeDissolvedTool(
   const classicalResult = await executeClassicalTool(toolName, args, tool);
   return {
     success: true,
+    result: buildToolResult(toolName, tool.sourceModule, args, false, classicalResult),
+    execution_method: "classical",
     result: buildToolResult(toolName, tool.source_module, args, false, classicalResult),
     execution_method: "classical",
     result: buildToolResult(toolName, tool.sourceModule, args, false, classicalResult),
