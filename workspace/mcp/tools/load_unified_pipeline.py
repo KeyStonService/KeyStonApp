@@ -586,25 +586,18 @@ def validate_parallelism(manifest: UnifiedPipelineManifest) -> bool:
         True if parallelism settings comply with INSTANT standards.
     """
     scheduling = manifest.spec.coreScheduling
+    standards = InstantExecutionStandards
 
     # Validate maxParallelAgents is within allowed INSTANT range
-    max_ok = (
-        scheduling.maxParallelAgents >= InstantExecutionStandards.MIN_PARALLEL_AGENTS
-        and scheduling.maxParallelAgents <= InstantExecutionStandards.MAX_PARALLEL_AGENTS
-    )
+    if not (standards.MIN_PARALLEL_AGENTS <= scheduling.maxParallelAgents <= standards.MAX_PARALLEL_AGENTS):
+        return False
 
-    # Validate minParallelAgents when in INSTANT mode
-    # If minParallelAgents is not configured, we treat it as passing
-    if is_instant_mode(manifest):
-        min_parallel = scheduling.minParallelAgents
-        min_ok = (
-            min_parallel is None
-            or min_parallel >= InstantExecutionStandards.MIN_PARALLEL_AGENTS
-        )
-    else:
-        min_ok = True
+    # Validate minParallelAgents in INSTANT mode (if configured)
+    if is_instant_mode(manifest) and scheduling.minParallelAgents is not None:
+        if scheduling.minParallelAgents < standards.MIN_PARALLEL_AGENTS:
+            return False
 
-    return min_ok and max_ok
+    return True
 
 
 __all__ = [

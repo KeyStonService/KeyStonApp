@@ -68,8 +68,7 @@ spec:
   pipelines:
     - name: quantum_validation
       type: validation
-      # Shim entrypoint: validate_pr1064_layers.py delegates to validate_pr1023_layers.py
-      # to preserve the existing validation flow.
+      # Validation entrypoint (PR1064 shim that delegates to base validation logic)
       entrypoint: tools/validation/validate_pr1064_layers.py
       worldClassValidationRef: workspace/config/validation/world-class-validation.yaml
       latency: 10000
