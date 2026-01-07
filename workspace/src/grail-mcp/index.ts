@@ -64,11 +64,21 @@ import { createNamespacePath } from './types/namespaces.js';
 // ============================================================================
 
 /**
+ * Activation error codes
+ */
+export type ActivationErrorCode =
+  | 'BOOTSTRAP_FAILED'
+  | 'REGISTRY_FAILED'
+  | 'CONFIG_INVALID'
+  | 'UNKNOWN_ERROR';
+
+/**
  * Error thrown when GRAIL activation fails
  */
 export class GrailActivationError extends Error {
   constructor(
     message: string,
+    public readonly code: ActivationErrorCode = 'UNKNOWN_ERROR',
     public readonly cause?: unknown
   ) {
     super(message);
@@ -166,7 +176,11 @@ class GrailMCPImpl implements Partial<GrailMCP> {
       return true;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      throw new GrailActivationError(`GRAIL activation failed: ${message}`, error);
+      throw new GrailActivationError(
+        `GRAIL activation failed: ${message}`,
+        'BOOTSTRAP_FAILED',
+        error
+      );
     }
   }
 
