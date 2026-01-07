@@ -5,6 +5,7 @@
  * @version 1.0.0
  */
 
+import yaml from 'js-yaml';
 import { XMLParser, XMLBuilder } from 'fast-xml-parser';
 import * as yaml from 'js-yaml';
 import type {
@@ -204,6 +205,7 @@ export class GrailFormatConverter implements FormatConverter {
     });
 
     // YAML handler using js-yaml library
+    // YAML handler (using js-yaml library)
     this.formatHandlers.set('yaml', {
       parse: async (data: unknown) => {
         if (typeof data !== 'string') {
@@ -214,6 +216,10 @@ export class GrailFormatConverter implements FormatConverter {
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           throw new Error(`Failed to parse YAML: ${message}`);
+          throw new FormatConversionError(
+            `YAML parsing failed: ${error instanceof Error ? error.message : String(error)}`,
+            'PARSE_ERROR'
+          );
         }
       },
       serialize: async (data: unknown, options?: FormatOptions) => {
@@ -226,6 +232,14 @@ export class GrailFormatConverter implements FormatConverter {
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           throw new Error(`Failed to serialize YAML: ${message}`);
+            lineWidth: -1,
+            noRefs: true
+          });
+        } catch (error) {
+          throw new FormatConversionError(
+            `YAML serialization failed: ${error instanceof Error ? error.message : String(error)}`,
+            'SERIALIZE_ERROR'
+          );
         }
       }
     });
@@ -310,6 +324,7 @@ export class GrailFormatConverter implements FormatConverter {
       serialize: serializeBinary
     });
   }
+
 
   private parseCsv(csv: string): unknown[] {
     const lines = csv.trim().split('\n');
