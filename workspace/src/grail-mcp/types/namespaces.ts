@@ -6,6 +6,9 @@
  * @style 臨床穿透 | 反諷揭露
  */
 
+// Import ES2015 module types for re-export in namespaces
+import type * as ProtocolsTypes from './protocols.js';
+
 // ============================================================================
 // NAMESPACE PATH UTILITIES
 // ============================================================================
@@ -584,6 +587,8 @@ export namespace Grail {
   /**
    * Protocols namespace - ops::registry (just communication standards)
    * @deprecated Use direct imports from './protocols-*.js' modules instead
+   * @deprecated Use direct imports from './protocols.js' instead
+   * @see {@link ../protocols}
    */
   export namespace Protocols {
     /**
@@ -594,6 +599,11 @@ export namespace Grail {
     export namespace Standard {
       export type ProtocolMessage = import('./protocols-standard.js').ProtocolMessage;
       export type StandardProtocol = import('./protocols-standard.js').StandardProtocol;
+     * @deprecated Use direct imports from './protocols.js' instead
+     */
+    export namespace Standard {
+      export type ProtocolMessage = ProtocolsTypes.ProtocolMessage;
+      export type StandardProtocol = ProtocolsTypes.StandardProtocol;
     }
 
     /**
@@ -605,16 +615,28 @@ export namespace Grail {
       export type GrailToolDefinition = import('./protocols-mcp.js').GrailToolDefinition;
       export type GrailResourceDefinition = import('./protocols-mcp.js').GrailResourceDefinition;
       export type MCPExtension = import('./protocols-mcp.js').MCPExtension;
+     * @deprecated Use direct imports from './protocols.js' instead
+     */
+    export namespace MCP {
+      export type GrailToolDefinition = ProtocolsTypes.GrailToolDefinition;
+      export type GrailResourceDefinition = ProtocolsTypes.GrailResourceDefinition;
+      export type MCPExtension = ProtocolsTypes.MCPExtension;
     }
 
     /**
      * Inter-Protocol Bridge
      * @deprecated Use direct imports from './protocols-bridge.js' instead
      * @see protocols-bridge.ts
+     * @see {@link ./protocols-bridge.js}
      */
     export namespace Bridge {
       export type ProtocolAdapter<T, U> = import('./protocols-bridge.js').ProtocolAdapter<T, U>;
       export type InterProtocolBridge = import('./protocols-bridge.js').InterProtocolBridge;
+     * @deprecated Use direct imports from './protocols.js' instead
+     */
+    export namespace Bridge {
+      export type ProtocolAdapter<T, U> = ProtocolsTypes.ProtocolAdapter<T, U>;
+      export type InterProtocolBridge = ProtocolsTypes.InterProtocolBridge;
     }
   }
 }

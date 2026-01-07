@@ -1,5 +1,6 @@
 /**
  * GRAIL MCP Extension Types
+ * GRAIL MCP Protocol Extensions
  * @module grail::types::protocols::mcp
  * @description Type definitions for MCP (Model Context Protocol) extensions
  * @version 1.0.0
