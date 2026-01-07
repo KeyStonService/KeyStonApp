@@ -59,6 +59,48 @@ import { GrailTypeConverter, getGlobalConverter } from './converters/type-conver
 import { GrailFormatConverter, getGlobalFormatConverter } from './converters/format-converter.js';
 import { createNamespacePath } from './types/namespaces.js';
 
+// ============================================================================
+// ERROR CLASSES
+// ============================================================================
+
+/**
+ * Activation error codes
+ * 
+ * Current usage:
+ * - BOOTSTRAP_FAILED: Used when activation fails during initialization
+ * 
+ * Reserved for future use:
+ * - REGISTRY_FAILED: For specific registry initialization failures
+ * - CONFIG_INVALID: For configuration validation errors  
+ * - UNKNOWN_ERROR: Fallback for unexpected errors
+ */
+export type ActivationErrorCode =
+  | 'BOOTSTRAP_FAILED'
+  | 'REGISTRY_FAILED'
+  | 'CONFIG_INVALID'
+  | 'UNKNOWN_ERROR';
+
+/**
+ * Error thrown when GRAIL activation fails
+ */
+export class GrailActivationError extends Error {
+  public readonly code: ActivationErrorCode;
+
+  constructor(
+    message: string,
+    code: ActivationErrorCode = 'UNKNOWN_ERROR',
+    cause?: unknown
+  ) {
+    super(message, { cause });
+    this.name = 'GrailActivationError';
+    this.code = code;
+  }
+}
+
+// ============================================================================
+// GRAIL MCP IMPLEMENTATION
+// ============================================================================
+
 /**
  * Clinical conversion engine implementation
  *
@@ -91,6 +133,8 @@ class GrailMCPImpl implements Partial<GrailMCP> {
 
   /**
    * Activate the system (no magic, just initialization)
+   * 
+   * @throws {GrailActivationError} If activation fails during initialization
    */
   async activate(): Promise<boolean> {
     if (this._activated) {
@@ -142,17 +186,41 @@ class GrailMCPImpl implements Partial<GrailMCP> {
       this._activated = true;
       return true;
     } catch (error) {
-      console.error('GRAIL activation failed:', error);
-      return false;
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      throw new GrailActivationError(
+        `GRAIL activation failed: ${errorMessage}`,
+        'ACTIVATION_FAILED',
+      const message = error instanceof Error ? error.message : String(error);
+      throw new GrailActivationError(
+        `GRAIL activation failed: ${message}`,
+        'BOOTSTRAP_FAILED',
+        error
+      );
     }
   }
 
   /**
+   * Demonstrate the system with example values
+   * 
+   * ⚠️ IMPORTANT: This method returns HARDCODED PLACEHOLDER VALUES for demonstration purposes only.
+   * These are NOT real metrics or measurements. Values like semanticDepth: 0.95, speedup: 100,
+   * and multiplier: 10 are example data to illustrate the API structure.
+   * 
+   * For actual system metrics, use getMetrics() instead.
+   * 
+   * @returns Example demonstration data structure (not real performance metrics)
    * Demonstrate the power of the Holy Grail
    * 
    * Note: Returns calculated metrics based on actual system state (registry stats,
    * activation status, and configuration). Values are estimates derived from
    * component counts and system configuration, not hardcoded mock data.
+   * ⚠️ **Important**: This method returns EXAMPLE/PLACEHOLDER values for demonstration purposes.
+   * These are not real measurements or actual system metrics. The values are hardcoded
+   * to illustrate the expected structure and range of results.
+   * 
+   * For actual runtime metrics, use the `getMetrics()` method instead.
+   * 
+   * @returns Example demonstration results (not based on real measurements)
    */
   async demonstrate(): Promise<GrailDemonstration> {
     if (!this._activated) {
@@ -218,6 +286,45 @@ class GrailMCPImpl implements Partial<GrailMCP> {
         totalFlow,
         extractionEfficiency,
         amplificationFactor: amplificationMultiplier
+    // PLACEHOLDER VALUES - Not real metrics
+    // NOTE: All values below are PLACEHOLDER examples, not real measurements
+    return {
+      multimodalCapabilities: {
+        semanticDepth: 0.95, // Example value
+        contextualAwareness: 0.98, // Example value
+        predictiveAccuracy: 0.97 // Example value
+      },
+      quantumAdvantage: {
+        achieved: this.config.quantumEnabled ?? false,
+        speedup: this.config.quantumEnabled ? 100 : 1, // Example speedup
+        fidelity: 0.999 // Example value
+      },
+      valueCreation: {
+        initialValue: 1_000_000, // Example value
+        amplifiedValue: 10_000_000, // Example value
+        fidelity: 0.999 // Example fidelity
+      },
+      valueCreation: {
+        initialValue: 1_000_000, // Example initial value
+        amplifiedValue: 10_000_000, // Example amplified value
+        multiplier: 10 // Example multiplier
+      },
+      alphaGeneration: {
+        alpha: 0.15, // Example alpha
+        riskFreeAlpha: 0.08, // Example value
+        consistency: 0.92 // Example value
+      },
+      globalValueFlow: {
+        totalFlow: 1_000_000_000, // Example value
+        extractionEfficiency: 0.88, // Example value
+        amplificationFactor: 5.2 // Example value
+        riskFreeAlpha: 0.08, // Example risk-free alpha
+        consistency: 0.92 // Example consistency
+      },
+      globalValueFlow: {
+        totalFlow: 1_000_000_000, // Example total flow
+        extractionEfficiency: 0.88, // Example efficiency
+        amplificationFactor: 5.2 // Example amplification
       }
     };
   }
@@ -259,6 +366,32 @@ class GrailMCPImpl implements Partial<GrailMCP> {
    */
   getRegistry(): GrailRegistry {
     return this.registry;
+  }
+}
+
+// ============================================================================
+// ERROR TYPES
+// ============================================================================
+
+/**
+ * Activation error codes
+ */
+export type ActivationErrorCode =
+  | 'ACTIVATION_FAILED'
+  | 'ALREADY_ACTIVATED'
+  | 'INVALID_CONFIG';
+
+/**
+ * Custom error for GRAIL activation failures
+ */
+export class GrailActivationError extends Error {
+  constructor(
+    message: string,
+    public readonly code: ActivationErrorCode,
+    public readonly cause?: unknown
+  ) {
+    super(message);
+    this.name = 'GrailActivationError';
   }
 }
 
