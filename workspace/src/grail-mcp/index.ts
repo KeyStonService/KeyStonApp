@@ -146,7 +146,7 @@ class GrailMCPImpl implements Partial<GrailMCP> {
       throw new GrailActivationError(
         `GRAIL activation failed: ${errorMessage}`,
         'ACTIVATION_FAILED',
-        error instanceof Error ? error : undefined
+        error
       );
     }
   }
@@ -248,7 +248,7 @@ export class GrailActivationError extends Error {
   constructor(
     message: string,
     public readonly code: ActivationErrorCode,
-    public readonly cause?: Error
+    public readonly cause?: unknown
   ) {
     super(message);
     this.name = 'GrailActivationError';
