@@ -125,7 +125,6 @@ export interface StreamProcessor {
   connect<T, U>(source: ValueStream<T>, sink: ValueStream<U>, transformer: (t: T) => U): void;
   getAmplificationFactor(): number;
 }
-  }
 
   // ============================================================================
   // GRAIL QUANTUM NAMESPACE
