@@ -11,6 +11,9 @@ export * from './namespaces.js';
 
 // Re-export ES2015 module types (preferred over namespaces)
 export * from './converters-quantum.js';
+export * from './protocols-standard.js';
+export * from './protocols-mcp.js';
+export * from './protocols-bridge.js';
 export * from './protocols-mcp.js';
 export * from './protocols-bridge.js';
 export * from './protocols.js';

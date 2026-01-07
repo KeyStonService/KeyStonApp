@@ -586,12 +586,19 @@ export namespace Grail {
 
   /**
    * Protocols namespace - ops::registry (just communication standards)
+   * @deprecated Use direct imports from './protocols-*.js' modules instead
    * @deprecated Use direct imports from './protocols.js' instead
    * @see {@link ../protocols}
    */
   export namespace Protocols {
     /**
      * Standard Protocol (no divinity required)
+     * @deprecated Use direct imports from './protocols-standard.js' instead
+     * @see protocols-standard.ts
+     */
+    export namespace Standard {
+      export type ProtocolMessage = import('./protocols-standard.js').ProtocolMessage;
+      export type StandardProtocol = import('./protocols-standard.js').StandardProtocol;
      * @deprecated Use direct imports from './protocols.js' instead
      */
     export namespace Standard {
@@ -619,6 +626,7 @@ export namespace Grail {
     /**
      * Inter-Protocol Bridge
      * @deprecated Use direct imports from './protocols-bridge.js' instead
+     * @see protocols-bridge.ts
      * @see {@link ./protocols-bridge.js}
      */
     export namespace Bridge {

@@ -1,11 +1,13 @@
 /**
  * GRAIL Inter-Protocol Bridge Types
  * @module grail::types::protocols::bridge
+ * @description Type definitions for inter-protocol bridging and adaptation
  * @description Type definitions for inter-protocol bridging
  * @version 1.0.0
  */
 
 /**
+ * Protocol Adapter for converting between protocol message types
  * Protocol Adapter Interface
  */
 export interface ProtocolAdapter<T, U> {
