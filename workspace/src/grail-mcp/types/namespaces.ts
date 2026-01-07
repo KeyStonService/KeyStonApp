@@ -56,87 +56,75 @@ export interface NamespaceIdentifier {
 // GRAIL CORE NAMESPACE
 // ============================================================================
 
-export namespace Grail {
-  /**
-   * Core namespace - ops:: Cold bootstrap layer
-   * No magic, just initialization procedures
-   */
-  export namespace Core {
-    /**
-     * Bootstrap Protocol - Cold startup procedures
-     */
-    export namespace Protocol {
-      export interface BootstrapConfig {
-        readonly version: string;
-        readonly activationMode: 'quantum_entanglement' | 'classical' | 'hybrid';
-        readonly configKeys?: string[];
-      }
+/**
+ * Bootstrap Protocol - Cold startup procedures
+ */
+export interface BootstrapConfig {
+  readonly version: string;
+  readonly activationMode: 'quantum_entanglement' | 'classical' | 'hybrid';
+  readonly configKeys?: string[];
+}
 
-      export interface ProtocolState {
-        readonly initialized: boolean;
-        readonly activatedAt?: Date;
-        readonly quantumSupremacy: boolean;
-      }
+export interface ProtocolState {
+  readonly initialized: boolean;
+  readonly activatedAt?: Date;
+  readonly quantumSupremacy: boolean;
+}
 
-      export interface BootstrapProtocol {
-        initiate(config: BootstrapConfig): Promise<ProtocolState>;
-        activate(): Promise<boolean>;
-        deactivate(): Promise<void>;
-        getState(): ProtocolState;
-      }
-    }
+export interface BootstrapProtocol {
+  initiate(config: BootstrapConfig): Promise<ProtocolState>;
+  activate(): Promise<boolean>;
+  deactivate(): Promise<void>;
+  getState(): ProtocolState;
+}
 
-    /**
-     * Registry - Namespace and component registration
-     */
-    export namespace Registry {
-      export interface RegistryEntry<T = unknown> {
-        readonly namespace: NamespacePath;
-        readonly component: T;
-        readonly metadata: ComponentMetadata;
-        readonly registeredAt: Date;
-      }
+/**
+ * Registry - Namespace and component registration
+ */
+export interface RegistryEntry<T = unknown> {
+  readonly namespace: NamespacePath;
+  readonly component: T;
+  readonly metadata: ComponentMetadata;
+  readonly registeredAt: Date;
+}
 
-      export interface ComponentMetadata {
-        readonly name: string;
-        readonly version: string;
-        readonly description?: string;
-        readonly dependencies?: NamespacePath[];
-        readonly valuationContribution?: string;
-      }
+export interface ComponentMetadata {
+  readonly name: string;
+  readonly version: string;
+  readonly description?: string;
+  readonly dependencies?: NamespacePath[];
+  readonly valuationContribution?: string;
+}
 
-      export interface NamespaceRegistry {
-        register<T>(namespace: NamespacePath, component: T, metadata: ComponentMetadata): void;
-        resolve<T>(namespace: NamespacePath): T | undefined;
-        list(domain?: GrailDomain): RegistryEntry[];
-        unregister(namespace: NamespacePath): boolean;
-      }
-    }
+export interface NamespaceRegistry {
+  register<T>(namespace: NamespacePath, component: T, metadata: ComponentMetadata): void;
+  resolve<T>(namespace: NamespacePath): T | undefined;
+  list(domain?: GrailDomain): RegistryEntry[];
+  unregister(namespace: NamespacePath): boolean;
+}
 
-    /**
-     * Stream - Value stream processing
-     */
-    export namespace Stream {
-      export interface StreamConfig {
-        readonly bufferSize?: number;
-        readonly backpressure?: 'drop' | 'buffer' | 'block';
-        readonly quantumEnhanced?: boolean;
-      }
+/**
+ * Stream - Value stream processing
+ */
+export interface StreamConfig {
+  readonly bufferSize?: number;
+  readonly backpressure?: 'drop' | 'buffer' | 'block';
+  readonly quantumEnhanced?: boolean;
+}
 
-      export interface ValueStream<T> {
-        push(value: T): Promise<void>;
-        pull(): Promise<T | undefined>;
-        transform<U>(fn: (value: T) => U): ValueStream<U>;
-        filter(predicate: (value: T) => boolean): ValueStream<T>;
-        amplify(factor: number): ValueStream<T>;
-      }
+export interface ValueStream<T> {
+  push(value: T): Promise<void>;
+  pull(): Promise<T | undefined>;
+  transform<U>(fn: (value: T) => U): ValueStream<U>;
+  filter(predicate: (value: T) => boolean): ValueStream<T>;
+  amplify(factor: number): ValueStream<T>;
+}
 
-      export interface StreamProcessor {
-        createStream<T>(config?: StreamConfig): ValueStream<T>;
-        connect<T, U>(source: ValueStream<T>, sink: ValueStream<U>, transformer: (t: T) => U): void;
-        getAmplificationFactor(): number;
-      }
-    }
+export interface StreamProcessor {
+  createStream<T>(config?: StreamConfig): ValueStream<T>;
+  connect<T, U>(source: ValueStream<T>, sink: ValueStream<U>, transformer: (t: T) => U): void;
+  getAmplificationFactor(): number;
+}
   }
 
   // ============================================================================
