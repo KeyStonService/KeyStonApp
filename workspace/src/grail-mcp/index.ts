@@ -148,38 +148,47 @@ class GrailMCPImpl implements Partial<GrailMCP> {
   }
 
   /**
-   * Demonstrate the power of the Holy Grail
+   * Demonstrate the system with example values
+   * 
+   * ⚠️ IMPORTANT: This method returns HARDCODED PLACEHOLDER VALUES for demonstration purposes only.
+   * These are NOT real metrics or measurements. Values like semanticDepth: 0.95, speedup: 100,
+   * and multiplier: 10 are example data to illustrate the API structure.
+   * 
+   * For actual system metrics, use getMetrics() instead.
+   * 
+   * @returns Example demonstration data structure (not real performance metrics)
    */
   async demonstrate(): Promise<GrailDemonstration> {
     if (!this._activated) {
       await this.activate();
     }
 
+    // PLACEHOLDER VALUES - Not real metrics
     return {
       multimodalCapabilities: {
-        semanticDepth: 0.95,
-        contextualAwareness: 0.98,
-        predictiveAccuracy: 0.97
+        semanticDepth: 0.95, // Example value
+        contextualAwareness: 0.98, // Example value
+        predictiveAccuracy: 0.97 // Example value
       },
       quantumAdvantage: {
         achieved: this.config.quantumEnabled ?? false,
-        speedup: this.config.quantumEnabled ? 100 : 1,
-        fidelity: 0.999
+        speedup: this.config.quantumEnabled ? 100 : 1, // Example speedup
+        fidelity: 0.999 // Example value
       },
       valueCreation: {
-        initialValue: 1_000_000,
-        amplifiedValue: 10_000_000,
-        multiplier: 10
+        initialValue: 1_000_000, // Example value
+        amplifiedValue: 10_000_000, // Example value
+        multiplier: 10 // Example multiplier
       },
       alphaGeneration: {
-        alpha: 0.15,
-        riskFreeAlpha: 0.08,
-        consistency: 0.92
+        alpha: 0.15, // Example alpha
+        riskFreeAlpha: 0.08, // Example value
+        consistency: 0.92 // Example value
       },
       globalValueFlow: {
-        totalFlow: 1_000_000_000,
-        extractionEfficiency: 0.88,
-        amplificationFactor: 5.2
+        totalFlow: 1_000_000_000, // Example value
+        extractionEfficiency: 0.88, // Example value
+        amplificationFactor: 5.2 // Example value
       }
     };
   }
