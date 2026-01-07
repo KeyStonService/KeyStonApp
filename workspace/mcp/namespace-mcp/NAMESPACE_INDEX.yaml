@@ -45,9 +45,14 @@ statistics:
     namespaceConfigs: 18
     namingSchemas: 8
     namingTools: 8
-  consolidationStatus: COMPLETE
+  consolidationStatus: INDEXED  # Files are indexed, redirect targets defined
   singleSourceEnabled: true
   redirectsConfigured: true
+  note: |
+    This index maps all scattered naming/namespace files.
+    Original files remain in their current locations for backward compatibility.
+    The 'redirect' field shows the TARGET path for future consolidation.
+    Use currentPath (original location) until migration is complete.
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # 核心命名規範 - Core Naming Conventions

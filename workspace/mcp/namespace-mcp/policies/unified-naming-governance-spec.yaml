@@ -344,49 +344,74 @@ monitoringAlerts:
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # 工具引用 - Tool References
+# NOTE: These tools exist in their original locations. The 'targetPath' shows
+# where they SHOULD be consolidated to in the future.
 # ═══════════════════════════════════════════════════════════════════════════════
 toolReferences:
   validators:
     - name: "namespace-validator.py"
-      path: "workspace/mcp/namespace-mcp/tools/namespace-validator.py"
+      currentPath: "workspace/tools/namespace-validator.py"
+      targetPath: "workspace/mcp/namespace-mcp/tools/namespace-validator.py"
+      consolidationStatus: "indexed-not-moved"
       
     - name: "naming-validator.sh"
-      path: "workspace/mcp/namespace-mcp/tools/naming-validator.sh"
+      currentPath: "workspace/src/governance/35-scripts/naming-validator.sh"
+      targetPath: "workspace/mcp/namespace-mcp/tools/naming-validator.sh"
+      consolidationStatus: "indexed-not-moved"
       
     - name: "validate_naming.py"
-      path: "workspace/mcp/namespace-mcp/tools/validate_naming.py"
+      currentPath: "workspace/tools/governance/python/validate_naming.py"
+      targetPath: "workspace/mcp/namespace-mcp/tools/validate_naming.py"
+      consolidationStatus: "indexed-not-moved"
 
   converters:
     - name: "namespace-converter.py"
-      path: "workspace/mcp/namespace-mcp/tools/namespace-converter.py"
+      currentPath: "workspace/tools/namespace-converter.py"
+      targetPath: "workspace/mcp/namespace-mcp/tools/namespace-converter.py"
+      consolidationStatus: "indexed-not-moved"
       
     - name: "naming-migration.py"
-      path: "workspace/mcp/namespace-mcp/tools/naming-migration.py"
+      currentPath: "workspace/tools/governance/python/naming-migration.py"
+      targetPath: "workspace/mcp/namespace-mcp/tools/naming-migration.py"
+      consolidationStatus: "indexed-not-moved"
 
   generators:
     - name: "naming-generator.sh"
-      path: "workspace/mcp/namespace-mcp/tools/naming-generator.sh"
+      currentPath: "workspace/src/governance/35-scripts/naming-generator.sh"
+      targetPath: "workspace/mcp/namespace-mcp/tools/naming-generator.sh"
+      consolidationStatus: "indexed-not-moved"
       
     - name: "generate_resource_name.sh"
-      path: "workspace/mcp/namespace-mcp/tools/generate_resource_name.sh"
+      currentPath: "workspace/tools/governance/bash/generate_resource_name.sh"
+      targetPath: "workspace/mcp/namespace-mcp/tools/generate_resource_name.sh"
+      consolidationStatus: "indexed-not-moved"
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Schema 引用 - Schema References
+# NOTE: These schemas exist in their original locations. The 'targetPath' shows
+# where they SHOULD be consolidated to in the future.
 # ═══════════════════════════════════════════════════════════════════════════════
 schemaReferences:
   primary:
     - name: "naming-policy.schema.yaml"
-      path: "workspace/mcp/namespace-mcp/schemas/naming-policy.schema.yaml"
+      currentPath: "workspace/src/shared/types/naming-policy.schema.yaml"
+      targetPath: "workspace/mcp/namespace-mcp/schemas/naming-policy.schema.yaml"
+      consolidationStatus: "indexed-not-moved"
       
     - name: "naming-spec.schema.yaml"
-      path: "workspace/mcp/namespace-mcp/schemas/naming-spec.schema.yaml"
+      currentPath: "workspace/src/shared/types/naming-spec.schema.yaml"
+      targetPath: "workspace/mcp/namespace-mcp/schemas/naming-spec.schema.yaml"
+      consolidationStatus: "indexed-not-moved"
       
     - name: "naming-convention.schema.json"
-      path: "workspace/mcp/namespace-mcp/schemas/naming-convention.schema.json"
+      currentPath: "workspace/src/governance/dimensions/99-naming-convention/schema.json"
+      targetPath: "workspace/mcp/namespace-mcp/schemas/naming-convention.schema.json"
+      consolidationStatus: "indexed-not-moved"
 
   validation:
     - name: "unified-pipeline.schema.json"
-      path: "workspace/mcp/namespace-mcp/schemas/unified-pipeline.schema.json"
+      currentPath: "workspace/mcp/namespace-mcp/schemas/unified-pipeline.schema.json"
+      status: "exists"
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # 交叉引用 - Cross References
