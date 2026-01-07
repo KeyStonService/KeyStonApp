@@ -1,9 +1,9 @@
 /**
  * GRAIL MCP Namespace Definitions
  * @module grail::types::namespaces
- * @description The Holy Grail of namespace architecture - Legendary type system
- * @version 1.0.0
- * @valuation $10M+
+ * @description Clinical dissection namespace architecture - Type system surgery
+ * @version 2.0.0
+ * @style 臨床穿透 | 反諷揭露
  */
 
 // ============================================================================
@@ -20,6 +20,19 @@ export type GrailDomain =
   | 'market'
   | 'converters'
   | 'protocols';
+
+/**
+ * Array of valid GRAIL domains for runtime validation.
+ * IMPORTANT: Must be kept in sync with the GrailDomain type above.
+ */
+export const VALID_GRAIL_DOMAINS: readonly GrailDomain[] = [
+  'core',
+  'quantum',
+  'nexus',
+  'market',
+  'converters',
+  'protocols'
+] as const;
 
 /**
  * Namespace path pattern: grail::{domain}::{subdomain}::{component}
@@ -42,18 +55,18 @@ export interface NamespaceIdentifier {
 
 export namespace Grail {
   /**
-   * Core namespace - The Sacred Heart of GRAIL
-   * Value: $2.5M foundational IP
+   * Core namespace - ops:: Cold bootstrap layer
+   * No magic, just initialization procedures
    */
   export namespace Core {
     /**
-     * Divine Protocol - Sacred initialization and lifecycle
+     * Bootstrap Protocol - Cold startup procedures
      */
     export namespace Protocol {
-      export interface DivineConfig {
+      export interface BootstrapConfig {
         readonly version: string;
         readonly activationMode: 'quantum_entanglement' | 'classical' | 'hybrid';
-        readonly sacredKeys?: string[];
+        readonly configKeys?: string[];
       }
 
       export interface ProtocolState {
@@ -62,8 +75,8 @@ export namespace Grail {
         readonly quantumSupremacy: boolean;
       }
 
-      export interface DivineProtocol {
-        initiate(config: DivineConfig): Promise<ProtocolState>;
+      export interface BootstrapProtocol {
+        initiate(config: BootstrapConfig): Promise<ProtocolState>;
         activate(): Promise<boolean>;
         deactivate(): Promise<void>;
         getState(): ProtocolState;
@@ -128,8 +141,8 @@ export namespace Grail {
   // ============================================================================
 
   /**
-   * Quantum namespace - Merlin's Enhancement Magic
-   * Value: $2.5M quantum algorithms
+   * Quantum namespace - hype::quantum_theatre (mostly performance art)
+   * Reality check: 99% is theatre, 1% might be real
    */
   export namespace Quantum {
     /**
@@ -223,8 +236,8 @@ export namespace Grail {
   // ============================================================================
 
   /**
-   * Nexus namespace - The Round Table of Connections
-   * Value: $1.5M integration value
+   * Nexus namespace - ops::pipeline (just pipes connecting things)
+   * No round tables, just data flowing through tubes
    */
   export namespace Nexus {
     /**
@@ -332,8 +345,8 @@ export namespace Grail {
   // ============================================================================
 
   /**
-   * Market namespace - The Quest for Value
-   * Value: $2.0M market applications
+   * Market namespace - reality::alpha_is_luck
+   * Uncomfortable truth: most alpha is just luck and timing
    */
   export namespace Market {
     /**
@@ -468,8 +481,8 @@ export namespace Grail {
   // ============================================================================
 
   /**
-   * Converters namespace - Excalibur's Transformation Power
-   * Value: $1.5M conversion engine
+   * Converters namespace - dissect::type_surgery (clinical format operations)
+   * No magic swords, just surgical type conversions
    */
   export namespace Converters {
     /**
@@ -553,33 +566,14 @@ export namespace Grail {
 
     /**
      * Quantum-Assisted Conversion
+     * @deprecated Use direct imports from './converters-quantum.js' instead
+     * @see converters-quantum.ts
      */
     export namespace Quantum {
-      export interface QuantumConversionConfig {
-        readonly useQuantumOptimization: boolean;
-        readonly parallelism: number;
-        readonly errorCorrection: boolean;
-      }
-
-      export interface QuantumConversionResult<T> {
-        readonly result: T;
-        readonly quantumAdvantage: boolean;
-        readonly speedup: number;
-        readonly fidelity: number;
-      }
-
-      export interface QuantumAssistedConverter {
-        configure(config: QuantumConversionConfig): void;
-        convert<S, T>(source: S, targetType: string): Promise<QuantumConversionResult<T>>;
-        batchConvert<S, T>(sources: S[], targetType: string): Promise<QuantumConversionResult<T[]>>;
-        getQuantumMetrics(): QuantumConversionMetrics;
-      }
-
-      export interface QuantumConversionMetrics {
-        readonly totalConversions: number;
-        readonly averageSpeedup: number;
-        readonly quantumUtilization: number;
-      }
+      export type QuantumConversionConfig = import('./converters-quantum.js').QuantumConversionConfig;
+      export type QuantumConversionResult<T> = import('./converters-quantum.js').QuantumConversionResult<T>;
+      export type QuantumAssistedConverter = import('./converters-quantum.js').QuantumAssistedConverter;
+      export type QuantumConversionMetrics = import('./converters-quantum.js').QuantumConversionMetrics;
     }
   }
 
@@ -588,25 +582,25 @@ export namespace Grail {
   // ============================================================================
 
   /**
-   * Protocols namespace - Sacred Communication Standards
+   * Protocols namespace - ops::registry (just communication standards)
    */
   export namespace Protocols {
     /**
-     * Divine Protocol
+     * Standard Protocol (no divinity required)
      */
-    export namespace Divine {
-      export interface SacredMessage {
+    export namespace Standard {
+      export interface ProtocolMessage {
         readonly type: string;
         readonly payload: unknown;
         readonly signature: Uint8Array;
         readonly timestamp: Date;
       }
 
-      export interface SacredProtocol {
-        send(message: SacredMessage): Promise<void>;
-        receive(): AsyncGenerator<SacredMessage>;
-        verify(message: SacredMessage): Promise<boolean>;
-        seal(message: SacredMessage): Promise<SacredMessage>;
+      export interface StandardProtocol {
+        send(message: ProtocolMessage): Promise<void>;
+        receive(): AsyncGenerator<ProtocolMessage>;
+        verify(message: ProtocolMessage): Promise<boolean>;
+        seal(message: ProtocolMessage): Promise<ProtocolMessage>;
       }
     }
 
@@ -685,8 +679,13 @@ export function parseNamespacePath(path: NamespacePath): NamespaceIdentifier {
     throw new Error(`Invalid namespace path: ${path}`);
   }
 
+  const domain = parts[1];
+  if (!VALID_GRAIL_DOMAINS.includes(domain as GrailDomain)) {
+    throw new Error(`Invalid domain in namespace path: ${path}. Domain "${domain}" is not a valid GrailDomain.`);
+  }
+
   return {
-    domain: parts[1] as GrailDomain,
+    domain: domain as GrailDomain,
     subdomain: parts[2],
     component: parts[3],
     fullPath: path
@@ -697,16 +696,11 @@ export function parseNamespacePath(path: NamespacePath): NamespaceIdentifier {
  * Validate a namespace path
  */
 export function isValidNamespacePath(path: string): path is NamespacePath {
-  const regex = /^grail::(core|quantum|nexus|market|converters|protocols)::\w+(::\w+)?$/;
+  const domainPattern = VALID_GRAIL_DOMAINS.join('|');
+  const regex = new RegExp(`^grail::(${domainPattern})::\\w+(::\\w+)?$`);
   return regex.test(path);
 }
 
 // ============================================================================
-// EXPORTS
+// END OF NAMESPACE DEFINITIONS
 // ============================================================================
-
-export type {
-  GrailDomain,
-  NamespacePath,
-  NamespaceIdentifier
-};
