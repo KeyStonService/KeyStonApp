@@ -48,35 +48,35 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          
+
           echo "🔍 Downloading logs for workflow run ${{ github.event.workflow_run.id }}..."
-          
+
           # Get workflow jobs
           JOBS_URL="https://api.github.com/repos/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}/jobs"
-          
+
           curl -s -H "Authorization: token $GITHUB_TOKEN" "$JOBS_URL" > jobs.json
-          
+
           # Extract failed job logs
           mkdir -p logs
-          
+
           # Get failed job IDs
           FAILED_JOBS=$(jq -r '.jobs[] | select(.conclusion == "failure") | .id' jobs.json)
-          
+
           echo "📋 Found failed jobs:"
           echo "$FAILED_JOBS"
-          
+
           # Download logs for each failed job
           for JOB_ID in $FAILED_JOBS; do
             echo "📥 Downloading log for job $JOB_ID..."
             LOGS_URL="https://api.github.com/repos/${{ github.repository }}/actions/jobs/$JOB_ID/logs"
-            
+
             curl -s -L -H "Authorization: token $GITHUB_TOKEN" "$LOGS_URL" > "logs/job-$JOB_ID.log"
-            
+
             # Combine all logs
             cat "logs/job-$JOB_ID.log" >> logs/combined.log
             echo -e "\n\n=== END OF JOB $JOB_ID ===\n\n" >> logs/combined.log
           done
-          
+
           if [ -f "logs/combined.log" ]; then
             echo "✅ Logs downloaded successfully"
             echo "log_file=logs/combined.log" >> $GITHUB_OUTPUT
@@ -90,15 +90,15 @@ jobs:
         if: steps.download-logs.outputs.log_file != ''
         run: |
           set -euo pipefail
-          
+
           echo "🔬 Analyzing CI errors..."
-          
+
           python3 scripts/ci-error-analyzer.py \
             --log-file "${{ steps.download-logs.outputs.log_file }}" \
             --mode comment \
             --output ci-error-analysis.json \
             --verbose || true
-          
+
           # Check if analysis was successful
           if [ -f "ci-error-analysis.json" ]; then
             echo "✅ Analysis complete"
@@ -124,22 +124,22 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          
+
           echo "💬 Posting analysis to PR..."
-          
+
           # Get PR number from workflow run
           PR_NUMBER=$(jq -r '.pull_requests[0].number' <<< "$(
             curl -s -H "Authorization: token $GITHUB_TOKEN" \
               "https://api.github.com/repos/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}"
           )")
-          
+
           if [ -z "$PR_NUMBER" ] || [ "$PR_NUMBER" == "null" ]; then
             echo "⚠️  No PR found for this workflow run"
             exit 0
           fi
-          
+
           echo "📝 Posting to PR #$PR_NUMBER"
-          
+
           # Read analysis report
           if [ -f "ci-error-analysis.json" ]; then
             # Generate markdown from JSON
@@ -180,7 +180,7 @@ if errors:
 print('---')
 print('*This analysis was generated automatically by the CI Error Analyzer*')
 " > comment.md
-            
+
             # Post comment
             curl -s -X POST \
               -H "Authorization: token $GITHUB_TOKEN" \
@@ -191,7 +191,7 @@ print('*This analysis was generated automatically by the CI Error Analyzer*')
   "body": $(jq -Rs . < comment.md)
 }
 EOF
-            
+
             echo "✅ Comment posted successfully"
           fi
 
@@ -201,15 +201,15 @@ EOF
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          
+
           echo "🔍 Checking for critical errors..."
-          
+
           # Check if there are critical errors
           CRITICAL_COUNT=$(jq -r '.summary.by_severity.critical // 0' ci-error-analysis.json)
-          
+
           if [ "$CRITICAL_COUNT" -gt 0 ]; then
             echo "🚨 Found $CRITICAL_COUNT critical errors, creating issue..."
-            
+
             # Generate issue body
             python3 -c "
 import json
@@ -251,7 +251,7 @@ for idx, error in enumerate(errors[:3], 1):
 print('---')
 print(f'[View full workflow run](https://github.com/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }})')
 " > issue.md
-            
+
             # Create issue
             curl -s -X POST \
               -H "Authorization: token $GITHUB_TOKEN" \
@@ -264,7 +264,7 @@ print(f'[View full workflow run](https://github.com/${{ github.repository }}/act
   "labels": ["ci-failure", "critical", "automated"]
 }
 EOF
-            
+
             echo "✅ Issue created successfully"
           else
             echo "ℹ️  No critical errors found"
