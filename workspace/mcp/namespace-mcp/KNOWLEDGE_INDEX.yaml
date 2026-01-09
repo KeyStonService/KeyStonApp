@@ -1,7 +1,7 @@
 %YAML 1.2
 ---
 # ═══════════════════════════════════════════════════════════════════════════════
-# SynergyMesh Knowledge Index → namespace-mcp 深度轉換對齊
+# SynergyMesh Knowledge Index → namespace-mcp Deep Conversion Alignment (深度轉換對齊)
 # Purpose: Bridge the SynergyMesh knowledge index into the namespace-mcp standard
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -23,7 +23,8 @@ metadata:
 
 sourceIndex:
   path: workspace/docs/knowledge_index.yaml
-  lastUpdated: "2026-01-09"
+  lastUpdated: "2025-11-30"
+  syncedAt: "2026-01-09"
   validator: workspace/tools/docs/validate_index.py
 
 conversion:
