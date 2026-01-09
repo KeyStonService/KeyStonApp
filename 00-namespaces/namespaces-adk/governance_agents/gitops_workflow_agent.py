@@ -3,9 +3,8 @@ GitOps PR Workflow Agent
 Autonomous agent for managing GitOps pull request workflows
 """
 
-import asyncio
-from typing import List, Dict, Any, Optional
-from datetime import datetime, timedelta
+from typing import List, Optional
+from datetime import datetime
 import logging
 from dataclasses import dataclass
 from enum import Enum
@@ -301,10 +300,8 @@ class GitOpsPRWorkflowAgent:
             
             # Calculate review score
             base_score = 1.0
-            for issue in issues:
-                base_score -= 0.2
-            for comment in comments:
-                base_score -= 0.1
+            base_score -= 0.2 * len(issues)
+            base_score -= 0.1 * len(comments)
             score = max(0.0, min(1.0, base_score))
             
             approved = (

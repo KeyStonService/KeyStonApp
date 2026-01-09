@@ -175,8 +175,6 @@ class DAGMaintenanceAgent:
                 params={"path": file_path}
             )
             
-            content = result.get("content", "")
-            
             # Parse YAML (simplified - in production, use proper YAML parser)
             node_id = file_path.split("/")[-1].replace(".yaml", "")
             
@@ -414,7 +412,7 @@ class DAGMaintenanceAgent:
                 self.logger.warning(f"Found {len(validation.violations)} violations")
                 
                 # Step 3: Detect conflicts
-                conflicts = await self.detect_conflicts(nodes)
+                await self.detect_conflicts(nodes)
                 
                 # Step 4: Auto-repair violations
                 repair = await self.auto_repair(validation.violations)

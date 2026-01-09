@@ -3,15 +3,10 @@ Unit tests for DAG Maintenance Agent
 """
 
 import pytest
-from unittest.mock import Mock, patch, call
-from datetime import datetime
 
 from enhanced_adk.governance_agents.dag_maintenance_agent import (
     DAGMaintenanceAgent,
     DependencyNode,
-    ValidationResult,
-    Conflict,
-    RepairResult
 )
 
 
