@@ -301,10 +301,8 @@ class GitOpsPRWorkflowAgent:
             
             # Calculate review score
             base_score = 1.0
-            for issue in issues:
-                base_score -= 0.2
-            for comment in comments:
-                base_score -= 0.1
+            base_score -= 0.2 * len(issues)
+            base_score -= 0.1 * len(comments)
             score = max(0.0, min(1.0, base_score))
             
             approved = (
