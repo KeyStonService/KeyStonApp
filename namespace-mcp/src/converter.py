@@ -183,8 +183,8 @@ class MachineNativeConverter:
             for old_dep, new_dep in mappings.items():
                 rules.append(ConversionRule(
                     name=f"dependency_{lang}_{old_dep}",
-                    pattern=f'["\']({old_dep})["\']',
-                    replacement=f'"{new_dep}"',
+                    pattern=rf'\b{re.escape(old_dep)}\b',
+                    replacement=new_dep,
                     file_types=["source_code", "config_files"],
                     context=f"{lang}_dependencies",
                     priority=85,
