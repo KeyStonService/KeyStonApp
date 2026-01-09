@@ -62,24 +62,35 @@
   - 多語言型別與 loader 鎖定一致性，降低配置漂移風險；  
   - MCP 工具覆蓋分析、測試、安全、性能多維度，支援跨平台協調。
 
-**小結**：核心執行與即時管線配置完善並具自動化彈性；治理與文檔一致性仍需補完。
+**小結**：核心執行與即時管線配置完善並具自動化彈性；  
+治理與文檔一致性仍需補完。
 
 ---
 
 ## 3. 待完成功能清單（依優先順序）
-| 優先級 | 項目 | 內容與依賴 | 建議時程 |
-|--------|------|-----------|---------|
-| 🔴 高 | 修正治理驗證接線 | `governanceValidation` 中的 `vision-tracker.py`、`validate-autonomy.py`、`latency-monitor.py` 已存在但仍被標記為 `planned`，需在 manifest 改為 `implemented` 並校驗調用路徑 | 3–5 天 |
-| 🔴 高 | 接入觀測數據替換樣板指標 | `tools/github_project_analyzer.py` 已支援 `--local-path` 本地掃描，但性能/延遲仍為樣板值，需接入監控或真實測試數據 | 2–3 天 |
-| 🟠 中 | 補充自動測試 | 為 `load_unified_pipeline.py` 與 TS 型別新增最小單元/模式測試，驗證 humanIntervention=0、延遲/並行邊界 | 2 天 |
-| 🟡 低 | 補齊 CI 可觀測性 | 針對 MCP 端 workflow（manifest 指向 `.github/workflows/instant-execution-validator.yml` 等）補充成功率/延遲儀表板 | 3 天 |
+
+- 🔴 高 — 修正治理驗證接線  
+  - 說明：`governanceValidation` 已有 `vision-tracker.py`、`validate-autonomy.py`、`latency-monitor.py`，但仍標記為 `planned`；需改為 `implemented` 並校驗調用路徑。  
+  - 建議時程：3–5 天  
+
+- 🔴 高 — 接入觀測數據替換樣板指標  
+  - 說明：`tools/github_project_analyzer.py` 支援 `--local-path` 本地掃描，但性能/延遲仍為樣板值；需接入監控或真實測試數據。  
+  - 建議時程：2–3 天  
+
+- 🟠 中 — 補充自動測試  
+  - 說明：為 `load_unified_pipeline.py` 與 TS 型別新增最小單元/模式測試，驗證 humanIntervention=0、延遲/並行邊界。  
+  - 建議時程：2 天  
+
+- 🟡 低 — 補齊 CI 可觀測性  
+  - 說明：針對 MCP 端 workflow（如 `.github/workflows/instant-execution-validator.yml`）補充成功率/延遲儀表板。  
+  - 建議時程：3 天  
 
 ---
 
 ## 4. 問題診斷（急救站）
 - **已知問題**  
-  - 治理配置不一致：`governanceValidation` 三項標記 `planned`，但 `workspace/src/governance/scripts` 已提供相應腳本，需將 manifest 標記為 `implemented` 並驗證調用鏈。  
-  - 指標樣板：`tools/github_project_analyzer.py` 現已支援本地掃描，但性能/延遲仍以樣板值輸出，需接入觀測或真實測試數據。  
+  - 治理配置不一致：`governanceValidation` 三項標記 `planned`，但 `workspace/src/governance/scripts` 已有對應腳本；需將 manifest 改為 `implemented` 並驗證調用鏈。  
+  - 指標樣板：`tools/github_project_analyzer.py` 支援本地掃描，但性能/延遲仍以樣板值輸出；需接入觀測或真實測試數據。  
 - **潛在技術債／風險**  
   - MCP 端點缺少自動測試與 lint 覆蓋（README 提到命令，但缺乏狀態證據）。  
   - 高並行配置（最多 256 agents）若無監控與節流，可能觸發資源尖峰。  
@@ -108,10 +119,16 @@
 ---
 
 ## 行動建議（可執行清單）
-1) **落實治理驗證**：將 unified-pipeline-config.yaml 中 `governanceValidation` 標記改為 `implemented`，並確保調用現有腳本（vision-tracker / validate-autonomy / latency-monitor）與 README 對齊。  
-2) **實測指標回填**：以 `load_unified_pipeline.py` + 實際延遲/性能數據生成報表，更新 analyzer 輸出以取代樣板值。  
-3) **補測試與 CI**：新增 loader/TS 型別單元測試並在 CI（instant-execution / quantum workflows）中執行；加入安全與依賴掃描。  
-4) **監控與容量防護**：對 auto-scaling 目標（CPU、p99、queue depth）建立儀表板與警戒，防止 256 代理並行帶來資源風險。
+1) **落實治理驗證**  
+   - 將 unified-pipeline-config.yaml 中 `governanceValidation` 標記改為 `implemented`。  
+   - 確保調用現有腳本（vision-tracker / validate-autonomy / latency-monitor）並與 README 對齊。  
+2) **實測指標回填**  
+   - 以 `load_unified_pipeline.py` 搭配實際延遲/性能數據生成報表，更新 analyzer 輸出以取代樣板值。  
+3) **補測試與 CI**  
+   - 新增 loader/TS 型別單元測試並在 CI（instant-execution / quantum workflows）中執行。  
+   - 加入安全與依賴掃描。  
+4) **監控與容量防護**  
+   - 針對 auto-scaling 目標（CPU、p99、queue depth）建立儀表板與警戒，防止 256 代理並行帶來資源風險。
 
 ---
 
