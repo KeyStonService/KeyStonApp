@@ -1,12 +1,14 @@
 /**
- * Main SDK Class
+ * Main SDK Class - Core orchestration and lifecycle management
  * 
- * Implements the main SDK class, encapsulating lifecycle management,
- * configuration, and orchestration of registry, adapters, and cross-cutting concerns.
+ * This class serves as the primary entry point for the namespace-sdk,
+ * managing initialization, tool registration, invocation routing,
+ * and integration with observability and credential management systems.
  */
 
-import { ToolRegistry, getGlobalRegistry } from './registry';
-import { Tool, ToolContext, ToolResult, ToolUtils } from './tool';
+import { ToolRegistry } from './registry';
+import { Tool, ToolMetadata, ToolInvocationResult } from './tool';
+import { SDKError, ErrorCode } from './errors';
 import { CredentialManager } from '../credentials/manager';
 import { SchemaValidator } from '../schema/validator';
 import { Logger } from '../observability/logger';
@@ -14,34 +16,38 @@ import { Tracer } from '../observability/tracer';
 import { MetricsCollector } from '../observability/metrics';
 import { AuditLogger } from '../observability/audit';
 import { ConfigManager } from '../config';
-import { PluginLoader } from '../plugins';
-import { SDKError, ToolNotFoundError } from './errors';
 
 /**
- * SDK Configuration
+ * SDK Configuration Options
  */
-export interface SDKConfiguration {
-  environment?: string;
-  configPath?: string;
+export interface SDKConfig {
+  /** Enable debug logging */
   debug?: boolean;
-  credentialProviders?: any[];
-  pluginDirs?: string[];
+  /** Credential provider configuration */
+  credentials?: {
+    providers?: string[];
+    defaultProvider?: string;
+  };
+  /** Observability configuration */
   observability?: {
-    logging?: boolean;
-    tracing?: boolean;
-    metrics?: boolean;
-    audit?: boolean;
+    enableLogging?: boolean;
+    enableTracing?: boolean;
+    enableMetrics?: boolean;
+    enableAudit?: boolean;
   };
-  registry?: {
-    useGlobal?: boolean;
-    autoLock?: boolean;
+  /** Plugin configuration */
+  plugins?: {
+    autoLoad?: boolean;
+    directories?: string[];
   };
+  /** Environment name (development, staging, production) */
+  environment?: string;
 }
 
 /**
- * SDK Lifecycle State
+ * SDK Initialization State
  */
-export enum SDKState {
+enum SDKState {
   UNINITIALIZED = 'uninitialized',
   INITIALIZING = 'initializing',
   READY = 'ready',
@@ -52,255 +58,341 @@ export enum SDKState {
 
 /**
  * Main SDK Class
+ * 
+ * Responsibilities:
+ * - Manage SDK lifecycle (initialization, shutdown, cleanup)
+ * - Coordinate tool registration and discovery
+ * - Route tool invocations to appropriate adapters
+ * - Integrate observability, auditing, and error handling
+ * - Enforce MCP protocol compliance
  */
-export class SDK {
-  private state: SDKState;
-  private config: SDKConfiguration;
+export class NamespaceSDK {
+  private state: SDKState = SDKState.UNINITIALIZED;
+  private config: SDKConfig;
+  
+  // Core components
   private registry: ToolRegistry;
   private credentialManager: CredentialManager;
   private schemaValidator: SchemaValidator;
+  
+  // Observability components
   private logger: Logger;
   private tracer: Tracer;
   private metrics: MetricsCollector;
-  private auditLogger: AuditLogger;
+  private audit: AuditLogger;
+  
+  // Configuration manager
   private configManager: ConfigManager;
-  private pluginLoader: PluginLoader;
-  private adapters: Map<string, any>;
 
-  constructor(config: SDKConfiguration = {}) {
-    this.state = SDKState.UNINITIALIZED;
+  /**
+   * Create a new SDK instance
+   * @param config SDK configuration options
+   */
+  constructor(config: SDKConfig = {}) {
     this.config = config;
-    this.adapters = new Map();
-
+    
+    // Initialize configuration manager
+    this.configManager = new ConfigManager(config.environment);
+    
+    // Initialize observability components
+    this.logger = new Logger({
+      debug: config.debug,
+      enabled: config.observability?.enableLogging !== false
+    });
+    
+    this.tracer = new Tracer({
+      enabled: config.observability?.enableTracing !== false
+    });
+    
+    this.metrics = new MetricsCollector({
+      enabled: config.observability?.enableMetrics !== false
+    });
+    
+    this.audit = new AuditLogger({
+      enabled: config.observability?.enableAudit !== false
+    });
+    
     // Initialize core components
-    this.logger = new Logger('SDK', { debug: config.debug });
-    this.tracer = new Tracer();
-    this.metrics = new MetricsCollector();
-    this.auditLogger = new AuditLogger();
-    this.configManager = new ConfigManager(config.configPath);
-    this.schemaValidator = new SchemaValidator();
-    this.credentialManager = new CredentialManager();
-    this.pluginLoader = new PluginLoader(config.pluginDirs);
-
-    // Initialize or use global registry
-    this.registry = config.registry?.useGlobal 
-      ? getGlobalRegistry() 
-      : new ToolRegistry();
-
-    this.logger.info('SDK instance created');
+    this.registry = new ToolRegistry(this.logger);
+    this.credentialManager = new CredentialManager(
+      config.credentials,
+      this.logger,
+      this.audit
+    );
+    this.schemaValidator = new SchemaValidator(this.logger);
+    
+    this.logger.info('SDK instance created', { config });
   }
 
   /**
    * Initialize the SDK
+   * Loads configuration, credentials, plugins, and prepares for tool invocation
    */
   async initialize(): Promise<void> {
     if (this.state !== SDKState.UNINITIALIZED) {
-      throw new SDKError(`Cannot initialize SDK in state: ${this.state}`);
+      throw new SDKError(
+        ErrorCode.INVALID_STATE,
+        `Cannot initialize SDK in state: ${this.state}`
+      );
     }
 
     this.state = SDKState.INITIALIZING;
-    this.logger.info('Initializing SDK...');
+    const span = this.tracer.startSpan('sdk.initialize');
 
     try {
+      this.logger.info('Initializing SDK...');
+
       // Load configuration
-      await this.configManager.load(this.config.environment);
-      this.logger.info('Configuration loaded');
+      await this.configManager.load();
+      this.logger.debug('Configuration loaded');
 
       // Initialize credential manager
-      await this.credentialManager.initialize(this.config.credentialProviders);
-      this.logger.info('Credential manager initialized');
+      await this.credentialManager.initialize();
+      this.logger.debug('Credential manager initialized');
 
-      // Initialize observability
-      if (this.config.observability?.tracing) {
-        await this.tracer.initialize();
-        this.logger.info('Tracing initialized');
+      // Load plugins if auto-load is enabled
+      if (this.config.plugins?.autoLoad) {
+        await this.loadPlugins();
       }
 
-      if (this.config.observability?.metrics) {
-        await this.metrics.initialize();
-        this.logger.info('Metrics collection initialized');
-      }
-
-      if (this.config.observability?.audit) {
-        await this.auditLogger.initialize();
-        this.logger.info('Audit logging initialized');
-      }
-
-      // Load plugins
-      await this.pluginLoader.loadPlugins(this.registry);
-      this.logger.info(`Loaded ${this.pluginLoader.getLoadedPlugins().length} plugins`);
-
-      // Load built-in adapters
-      await this.loadBuiltInAdapters();
-      this.logger.info('Built-in adapters loaded');
-
-      // Lock registry if configured
-      if (this.config.registry?.autoLock) {
-        this.registry.lock();
-        this.logger.info('Registry locked');
-      }
+      // Validate registry state
+      const toolCount = this.registry.getToolCount();
+      this.logger.info(`SDK initialized with ${toolCount} tools`);
 
       this.state = SDKState.READY;
-      this.logger.info('SDK initialization complete');
+      this.metrics.increment('sdk.initialized');
+      this.audit.log('sdk.initialized', { toolCount });
 
-      // Log audit event
-      await this.auditLogger.log({
-        event: 'sdk_initialized',
-        timestamp: new Date(),
-        metadata: {
-          environment: this.config.environment,
-          toolCount: this.registry.size()
-        }
-      });
-
-    } catch (error: any) {
+      span.setStatus({ code: 0, message: 'Success' });
+    } catch (error) {
       this.state = SDKState.ERROR;
       this.logger.error('SDK initialization failed', error);
-      throw error;
+      this.metrics.increment('sdk.initialization_failed');
+      
+      span.setStatus({ code: 1, message: error.message });
+      throw new SDKError(
+        ErrorCode.INITIALIZATION_FAILED,
+        'Failed to initialize SDK',
+        error
+      );
+    } finally {
+      span.end();
     }
   }
 
   /**
-   * Load built-in adapters
+   * Register a tool with the SDK
+   * @param tool Tool instance to register
    */
-  private async loadBuiltInAdapters(): Promise<void> {
-    // Adapters will be loaded dynamically
-    // This is a placeholder for the adapter loading logic
-    const adapterNames = ['github', 'cloudflare', 'openai', 'google'];
+  registerTool(tool: Tool): void {
+    this.ensureReady();
     
-    for (const adapterName of adapterNames) {
-      try {
-        // Dynamic import would happen here
-        // const adapter = await import(`../adapters/${adapterName}`);
-        // await adapter.register(this.registry, this.credentialManager);
-        this.logger.debug(`Adapter '${adapterName}' loaded`);
-      } catch (error: any) {
-        this.logger.warn(`Failed to load adapter '${adapterName}': ${error.message}`);
-      }
+    const span = this.tracer.startSpan('sdk.registerTool', {
+      toolName: tool.metadata.name
+    });
+
+    try {
+      this.registry.register(tool);
+      this.logger.info(`Tool registered: ${tool.metadata.name}`);
+      this.metrics.increment('sdk.tool_registered', { tool: tool.metadata.name });
+      this.audit.log('tool.registered', { 
+        toolName: tool.metadata.name,
+        toolVersion: tool.metadata.version 
+      });
+
+      span.setStatus({ code: 0, message: 'Success' });
+    } catch (error) {
+      this.logger.error(`Failed to register tool: ${tool.metadata.name}`, error);
+      span.setStatus({ code: 1, message: error.message });
+      throw error;
+    } finally {
+      span.end();
     }
   }
 
   /**
    * List all available tools
+   * @returns Array of tool metadata
    */
-  async listTools(filter?: any): Promise<any[]> {
+  listTools(): ToolMetadata[] {
     this.ensureReady();
-    
-    const span = this.tracer.startSpan('listTools');
-    
-    try {
-      const tools = filter 
-        ? this.registry.filter(filter)
-        : this.registry.listMetadata();
-
-      this.metrics.increment('tools.list', { count: tools.length });
-      
-      return tools;
-    } finally {
-      span.end();
-    }
+    return this.registry.listTools();
   }
 
   /**
-   * Get tool metadata
+   * Get metadata for a specific tool
+   * @param toolName Name of the tool
+   * @returns Tool metadata or undefined if not found
    */
-  async getToolMetadata(toolName: string): Promise<any> {
+  getTool(toolName: string): ToolMetadata | undefined {
     this.ensureReady();
-    
-    const descriptor = this.registry.get(toolName);
-    if (!descriptor) {
-      throw new ToolNotFoundError(toolName);
-    }
-
-    return {
-      ...descriptor.metadata,
-      inputSchema: descriptor.inputSchema,
-      outputSchema: descriptor.outputSchema
-    };
+    return this.registry.getTool(toolName);
   }
 
   /**
-   * Invoke a tool
+   * Invoke a tool with the given parameters
+   * @param toolName Name of the tool to invoke
+   * @param params Tool invocation parameters
+   * @returns Tool invocation result
    */
-  async invokeTool<TInput = any, TOutput = any>(
+  async invokeTool(
     toolName: string,
-    input: TInput,
-    context?: Partial<ToolContext>
-  ): Promise<ToolResult<TOutput>> {
+    params: Record<string, any>
+  ): Promise<ToolInvocationResult> {
     this.ensureReady();
 
-    const fullContext = ToolUtils.createContext(context);
-    const span = this.tracer.startSpan('invokeTool', {
+    const span = this.tracer.startSpan('sdk.invokeTool', {
       toolName,
-      correlationId: fullContext.correlationId
+      paramsKeys: Object.keys(params)
     });
 
     const startTime = Date.now();
 
     try {
-      // Get tool instance
-      const tool = this.registry.createTool(toolName);
-      
-      this.logger.info(`Invoking tool: ${toolName}`, {
-        correlationId: fullContext.correlationId
-      });
+      this.logger.info(`Invoking tool: ${toolName}`, { params });
 
-      // Execute tool
-      const result = await tool.execute(input, fullContext);
+      // Get tool from registry
+      const tool = this.registry.getToolInstance(toolName);
+      if (!tool) {
+        throw new SDKError(
+          ErrorCode.TOOL_NOT_FOUND,
+          `Tool not found: ${toolName}`
+        );
+      }
+
+      // Validate input parameters against schema
+      const inputSchema = tool.getInputSchema();
+      const validationResult = await this.schemaValidator.validate(
+        params,
+        inputSchema
+      );
+
+      if (!validationResult.valid) {
+        throw new SDKError(
+          ErrorCode.VALIDATION_FAILED,
+          'Input validation failed',
+          validationResult.errors
+        );
+      }
+
+      // Get credentials if required
+      const credentials = await this.getToolCredentials(tool);
+
+      // Invoke the tool
+      const result = await tool.invoke(params, credentials);
+
+      // Validate output against schema
+      const outputSchema = tool.getOutputSchema();
+      if (outputSchema) {
+        const outputValidation = await this.schemaValidator.validate(
+          result.data,
+          outputSchema
+        );
+
+        if (!outputValidation.valid) {
+          this.logger.warn('Output validation failed', {
+            toolName,
+            errors: outputValidation.errors
+          });
+        }
+      }
 
       // Record metrics
       const duration = Date.now() - startTime;
-      this.metrics.histogram('tool.execution.duration', duration, {
+      this.metrics.recordHistogram('sdk.tool_invocation_duration', duration, {
         tool: toolName,
-        success: result.success
+        success: 'true'
       });
-      this.metrics.increment('tool.invocations', {
-        tool: toolName,
-        success: result.success
-      });
+      this.metrics.increment('sdk.tool_invoked', { tool: toolName });
 
-      // Log audit event
-      await this.auditLogger.log({
-        event: 'tool_invoked',
+      // Audit log
+      this.audit.log('tool.invoked', {
         toolName,
-        correlationId: fullContext.correlationId,
-        timestamp: new Date(),
-        success: result.success,
         duration,
-        userId: fullContext.userId
+        success: true,
+        resultSize: JSON.stringify(result.data).length
       });
 
+      this.logger.info(`Tool invocation successful: ${toolName}`, {
+        duration
+      });
+
+      span.setStatus({ code: 0, message: 'Success' });
       return result;
 
-    } catch (error: any) {
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      
       this.logger.error(`Tool invocation failed: ${toolName}`, error);
       
-      this.metrics.increment('tool.errors', {
+      this.metrics.recordHistogram('sdk.tool_invocation_duration', duration, {
         tool: toolName,
-        errorType: error.name
+        success: 'false'
       });
+      this.metrics.increment('sdk.tool_invocation_failed', { tool: toolName });
 
-      await this.auditLogger.log({
-        event: 'tool_invocation_failed',
+      this.audit.log('tool.invocation_failed', {
         toolName,
-        correlationId: fullContext.correlationId,
-        timestamp: new Date(),
+        duration,
         error: error.message
       });
 
-      throw error;
+      span.setStatus({ code: 1, message: error.message });
 
+      // Re-throw as SDKError if not already
+      if (error instanceof SDKError) {
+        throw error;
+      }
+
+      throw new SDKError(
+        ErrorCode.TOOL_EXECUTION_FAILED,
+        `Tool execution failed: ${toolName}`,
+        error
+      );
     } finally {
       span.end();
     }
   }
 
   /**
-   * Get registry statistics
+   * Shutdown the SDK and cleanup resources
    */
-  getStats(): any {
-    this.ensureReady();
-    return this.registry.getStats();
+  async shutdown(): Promise<void> {
+    if (this.state === SDKState.SHUTDOWN || this.state === SDKState.SHUTTING_DOWN) {
+      return;
+    }
+
+    this.state = SDKState.SHUTTING_DOWN;
+    const span = this.tracer.startSpan('sdk.shutdown');
+
+    try {
+      this.logger.info('Shutting down SDK...');
+
+      // Cleanup credential manager
+      await this.credentialManager.cleanup();
+
+      // Clear registry
+      this.registry.clear();
+
+      // Flush observability data
+      await Promise.all([
+        this.logger.flush(),
+        this.tracer.flush(),
+        this.metrics.flush(),
+        this.audit.flush()
+      ]);
+
+      this.state = SDKState.SHUTDOWN;
+      this.logger.info('SDK shutdown complete');
+
+      span.setStatus({ code: 0, message: 'Success' });
+    } catch (error) {
+      this.logger.error('SDK shutdown failed', error);
+      span.setStatus({ code: 1, message: error.message });
+      throw error;
+    } finally {
+      span.end();
+    }
   }
 
   /**
@@ -311,71 +403,67 @@ export class SDK {
   }
 
   /**
-   * Check if SDK is ready
+   * Check if SDK is ready for operations
    */
   isReady(): boolean {
     return this.state === SDKState.READY;
   }
 
   /**
-   * Shutdown the SDK
+   * Load plugins from configured directories
    */
-  async shutdown(): Promise<void> {
-    if (this.state === SDKState.SHUTDOWN || this.state === SDKState.SHUTTING_DOWN) {
-      return;
-    }
-
-    this.state = SDKState.SHUTTING_DOWN;
-    this.logger.info('Shutting down SDK...');
-
-    try {
-      // Shutdown observability
-      await this.tracer.shutdown();
-      await this.metrics.shutdown();
-      await this.auditLogger.shutdown();
-
-      // Shutdown credential manager
-      await this.credentialManager.shutdown();
-
-      // Unload plugins
-      await this.pluginLoader.unloadPlugins();
-
-      this.state = SDKState.SHUTDOWN;
-      this.logger.info('SDK shutdown complete');
-
-    } catch (error: any) {
-      this.logger.error('Error during shutdown', error);
-      throw error;
-    }
+  private async loadPlugins(): Promise<void> {
+    this.logger.info('Loading plugins...');
+    // Plugin loading implementation will be added in plugins module
+    // For now, this is a placeholder
+    this.logger.debug('Plugin loading not yet implemented');
   }
 
   /**
-   * Ensure SDK is ready
+   * Get credentials for a tool
+   */
+  private async getToolCredentials(tool: Tool): Promise<any> {
+    const credentialRequirements = tool.getCredentialRequirements();
+    
+    if (!credentialRequirements || credentialRequirements.length === 0) {
+      return null;
+    }
+
+    const credentials: Record<string, any> = {};
+
+    for (const requirement of credentialRequirements) {
+      const credential = await this.credentialManager.getCredential(
+        requirement.key,
+        requirement.scope
+      );
+
+      if (!credential && requirement.required) {
+        throw new SDKError(
+          ErrorCode.CREDENTIAL_NOT_FOUND,
+          `Required credential not found: ${requirement.key}`
+        );
+      }
+
+      if (credential) {
+        credentials[requirement.key] = credential;
+      }
+    }
+
+    return credentials;
+  }
+
+  /**
+   * Ensure SDK is in ready state
    */
   private ensureReady(): void {
     if (this.state !== SDKState.READY) {
-      throw new SDKError(`SDK is not ready. Current state: ${this.state}`);
+      throw new SDKError(
+        ErrorCode.INVALID_STATE,
+        `SDK is not ready. Current state: ${this.state}`
+      );
     }
   }
-
-  /**
-   * Get registry instance
-   */
-  getRegistry(): ToolRegistry {
-    return this.registry;
-  }
-
-  /**
-   * Get credential manager
-   */
-  getCredentialManager(): CredentialManager {
-    return this.credentialManager;
-  }
-
-  /**
-   * Get logger
-   */
-  getLogger(): Logger {
-    return this.logger;
-  }
 }
+
+// Export SDK state enum
+export { SDKState };

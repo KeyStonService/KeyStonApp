@@ -1,154 +1,248 @@
 /**
  * File-based Credential Provider
  * 
- * Loads credentials from JSON files.
+ * Loads credentials from JSON, YAML, or .env files.
  */
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import {
-  CredentialProvider,
-  AnyCredential,
-  Credential,
-  CredentialUtils
-} from '../types';
+import { CredentialProvider, Credential, CredentialType } from '../types';
 
 /**
- * File credential provider configuration
+ * File provider options
  */
-export interface FileProviderConfig {
+export interface FileProviderOptions {
   /** Path to credentials file */
-  filePath: string;
-  /** Auto-save on changes */
-  autoSave?: boolean;
-  /** File permissions (octal) */
-  fileMode?: number;
+  path: string;
+  
+  /** File format */
+  format?: 'json' | 'yaml' | 'env';
+  
+  /** Whether to watch file for changes */
+  watch?: boolean;
+  
+  /** Encryption key for encrypted files */
+  encryptionKey?: string;
 }
 
 /**
- * File-based credential provider
+ * File Credential Provider
+ * 
+ * Loads credentials from a file with support for JSON, YAML, and .env formats.
  */
 export class FileCredentialProvider implements CredentialProvider {
-  name = 'file';
-  priority = 50; // Medium priority
+  public readonly name = 'file';
+  private options: FileProviderOptions;
+  private credentials: Map<string, Credential> = new Map();
+  private watcher?: any;
 
-  private credentials: Map<string, AnyCredential>;
-  private config: FileProviderConfig;
-  private dirty: boolean;
-
-  constructor(config: FileProviderConfig) {
-    this.credentials = new Map();
-    this.config = {
-      autoSave: true,
-      fileMode: 0o600, // Read/write for owner only
-      ...config
+  constructor(options: FileProviderOptions) {
+    this.options = {
+      format: 'json',
+      watch: false,
+      ...options
     };
-    this.dirty = false;
   }
 
   async initialize(): Promise<void> {
-    await this.loadFromFile();
+    await this.loadCredentials();
+
+    if (this.options.watch) {
+      await this.startWatching();
+    }
+  }
+
+  async getCredential(key: string, scope?: string): Promise<Credential | undefined> {
+    const cacheKey = this.getCacheKey(key, scope);
+    return this.credentials.get(cacheKey);
+  }
+
+  async setCredential(credential: Credential): Promise<void> {
+    const cacheKey = this.getCacheKey(credential.key, credential.scope);
+    this.credentials.set(cacheKey, credential);
+    await this.saveCredentials();
+  }
+
+  async deleteCredential(key: string, scope?: string): Promise<void> {
+    const cacheKey = this.getCacheKey(key, scope);
+    this.credentials.delete(cacheKey);
+    await this.saveCredentials();
+  }
+
+  async listCredentials(): Promise<string[]> {
+    return Array.from(this.credentials.keys());
+  }
+
+  supports(operation: string): boolean {
+    return ['get', 'set', 'delete', 'list'].includes(operation);
+  }
+
+  async cleanup(): Promise<void> {
+    if (this.watcher) {
+      this.watcher.close();
+      this.watcher = undefined;
+    }
   }
 
   /**
    * Load credentials from file
    */
-  private async loadFromFile(): Promise<void> {
+  private async loadCredentials(): Promise<void> {
     try {
-      const content = await fs.readFile(this.config.filePath, 'utf-8');
-      const data = JSON.parse(content);
+      const content = await fs.readFile(this.options.path, 'utf-8');
+      const data = this.parseContent(content);
 
-      if (data.credentials && Array.isArray(data.credentials)) {
-        for (const cred of data.credentials) {
-          // Restore Date objects
-          if (cred.createdAt) cred.createdAt = new Date(cred.createdAt);
-          if (cred.expiresAt) cred.expiresAt = new Date(cred.expiresAt);
-          if (cred.lastUsedAt) cred.lastUsedAt = new Date(cred.lastUsedAt);
+      this.credentials.clear();
 
-          this.credentials.set(cred.service, cred);
-        }
+      for (const [key, value] of Object.entries(data)) {
+        const credential: Credential = {
+          key,
+          value: typeof value === 'string' ? value : JSON.stringify(value),
+          type: CredentialType.CUSTOM,
+          metadata: {
+            source: 'file',
+            filePath: this.options.path
+          }
+        };
+
+        this.credentials.set(key, credential);
       }
-    } catch (error: any) {
+    } catch (error) {
       if (error.code === 'ENOENT') {
         // File doesn't exist, start with empty credentials
-        return;
+        this.credentials.clear();
+      } else {
+        throw error;
       }
-      throw new Error(`Failed to load credentials from file: ${error.message}`);
     }
   }
 
   /**
    * Save credentials to file
    */
-  private async saveToFile(): Promise<void> {
-    const data = {
-      version: '1.0',
-      credentials: Array.from(this.credentials.values())
-    };
+  private async saveCredentials(): Promise<void> {
+    const data: Record<string, string> = {};
 
-    const content = JSON.stringify(data, null, 2);
+    for (const [key, credential] of this.credentials.entries()) {
+      data[credential.key] = credential.value;
+    }
+
+    const content = this.formatContent(data);
 
     // Ensure directory exists
-    const dir = path.dirname(this.config.filePath);
+    const dir = path.dirname(this.options.path);
     await fs.mkdir(dir, { recursive: true });
 
-    // Write file with restricted permissions
-    await fs.writeFile(this.config.filePath, content, {
-      mode: this.config.fileMode
-    });
-
-    this.dirty = false;
-  }
-
-  async getCredential(service: string, scope?: string[]): Promise<AnyCredential | null> {
-    return this.credentials.get(service) || null;
-  }
-
-  async hasCredential(service: string, scope?: string[]): Promise<boolean> {
-    return this.credentials.has(service);
-  }
-
-  async storeCredential(credential: AnyCredential): Promise<void> {
-    this.credentials.set(credential.service, credential);
-    this.dirty = true;
-
-    if (this.config.autoSave) {
-      await this.saveToFile();
-    }
-  }
-
-  async deleteCredential(id: string): Promise<boolean> {
-    for (const [service, cred] of this.credentials.entries()) {
-      if (cred.id === id) {
-        this.credentials.delete(service);
-        this.dirty = true;
-
-        if (this.config.autoSave) {
-          await this.saveToFile();
-        }
-
-        return true;
-      }
-    }
-
-    return false;
-  }
-
-  async listCredentials(): Promise<Credential[]> {
-    return Array.from(this.credentials.values()).map(cred => CredentialUtils.sanitize(cred) as Credential);
-  }
-
-  async shutdown(): Promise<void> {
-    if (this.dirty) {
-      await this.saveToFile();
-    }
-    this.credentials.clear();
+    // Write file
+    await fs.writeFile(this.options.path, content, 'utf-8');
   }
 
   /**
-   * Force save to file
+   * Parse file content based on format
    */
-  async flush(): Promise<void> {
-    await this.saveToFile();
+  private parseContent(content: string): Record<string, any> {
+    switch (this.options.format) {
+      case 'json':
+        return JSON.parse(content);
+      
+      case 'env':
+        return this.parseEnvFormat(content);
+      
+      case 'yaml':
+        // YAML parsing would require a library like 'js-yaml'
+        // For now, fall back to JSON
+        return JSON.parse(content);
+      
+      default:
+        return JSON.parse(content);
+    }
+  }
+
+  /**
+   * Format content based on format
+   */
+  private formatContent(data: Record<string, any>): string {
+    switch (this.options.format) {
+      case 'json':
+        return JSON.stringify(data, null, 2);
+      
+      case 'env':
+        return this.formatEnv(data);
+      
+      case 'yaml':
+        // YAML formatting would require a library
+        // For now, fall back to JSON
+        return JSON.stringify(data, null, 2);
+      
+      default:
+        return JSON.stringify(data, null, 2);
+    }
+  }
+
+  /**
+   * Parse .env format
+   */
+  private parseEnvFormat(content: string): Record<string, string> {
+    const result: Record<string, string> = {};
+    const lines = content.split('\n');
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      
+      // Skip empty lines and comments
+      if (!trimmed || trimmed.startsWith('#')) {
+        continue;
+      }
+
+      const index = trimmed.indexOf('=');
+      if (index === -1) {
+        continue;
+      }
+
+      const key = trimmed.substring(0, index).trim();
+      let value = trimmed.substring(index + 1).trim();
+
+      // Remove quotes if present
+      if (
+        (value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))
+      ) {
+        value = value.substring(1, value.length - 1);
+      }
+
+      result[key] = value;
+    }
+
+    return result;
+  }
+
+  /**
+   * Format as .env
+   */
+  private formatEnv(data: Record<string, string>): string {
+    const lines: string[] = [];
+
+    for (const [key, value] of Object.entries(data)) {
+      // Quote value if it contains spaces
+      const quotedValue = value.includes(' ') ? `"${value}"` : value;
+      lines.push(`${key}=${quotedValue}`);
+    }
+
+    return lines.join('\n');
+  }
+
+  /**
+   * Start watching file for changes
+   */
+  private async startWatching(): Promise<void> {
+    // File watching would require fs.watch or a library like chokidar
+    // This is a placeholder for the implementation
+  }
+
+  /**
+   * Get cache key
+   */
+  private getCacheKey(key: string, scope?: string): string {
+    return scope ? `${key}:${scope}` : key;
   }
 }

@@ -1,281 +1,480 @@
 /**
- * Tool Wrapper Base Class
+ * Tool Base Class - Standard interface for all tool wrappers
  * 
- * Defines the base class and interface for all tool wrappers,
+ * Defines the base class and interfaces for all tool wrappers,
  * enforcing a standard contract for tool metadata, schema, and invocation.
  */
 
-import { SchemaValidator } from '../schema/validator';
-import { ToolExecutionError, SchemaValidationError } from './errors';
+import { SDKError, ErrorCode } from './errors';
 
 /**
- * Tool metadata interface
+ * Tool metadata describing the tool's identity and capabilities
  */
 export interface ToolMetadata {
-  /** Unique tool identifier */
+  /** Unique tool name (e.g., 'github_create_issue') */
   name: string;
-  /** Human-readable title */
+  
+  /** Human-readable tool title */
   title: string;
-  /** Tool description */
+  
+  /** Detailed description of what the tool does */
   description: string;
-  /** Tool version */
+  
+  /** Semantic version (e.g., '1.0.0') */
   version: string;
-  /** Tool category/tags */
-  tags?: string[];
-  /** Adapter/service name */
-  adapter: string;
-  /** Required capabilities */
+  
+  /** Adapter/service this tool belongs to (e.g., 'github', 'cloudflare') */
+  adapter?: string;
+  
+  /** Tool capabilities/features */
   capabilities?: string[];
-  /** Deprecation notice */
-  deprecated?: boolean;
-  /** Deprecation message */
-  deprecationMessage?: string;
+  
+  /** Additional metadata */
+  metadata?: Record<string, any>;
+}
+
+/**
+ * JSON Schema definition
+ */
+export interface JSONSchema {
+  type: string;
+  properties?: Record<string, any>;
+  required?: string[];
+  additionalProperties?: boolean;
+  [key: string]: any;
+}
+
+/**
+ * Credential requirement specification
+ */
+export interface CredentialRequirement {
+  /** Credential key/identifier */
+  key: string;
+  
+  /** Credential scope (e.g., 'repo', 'user') */
+  scope?: string;
+  
+  /** Whether this credential is required */
+  required: boolean;
+  
+  /** Description of what this credential is used for */
+  description?: string;
 }
 
 /**
  * Tool invocation context
  */
 export interface ToolContext {
-  /** Correlation ID for tracing */
-  correlationId: string;
-  /** User/agent identifier */
+  /** Request ID for tracing */
+  requestId?: string;
+  
+  /** User/agent making the request */
   userId?: string;
-  /** Session identifier */
-  sessionId?: string;
-  /** Request timestamp */
-  timestamp: Date;
-  /** Additional metadata */
+  
+  /** Additional context metadata */
   metadata?: Record<string, any>;
 }
 
 /**
  * Tool invocation result
  */
-export interface ToolResult<T = any> {
-  /** Execution success status */
+export interface ToolInvocationResult {
+  /** Whether the invocation was successful */
   success: boolean;
-  /** Result data */
-  data?: T;
-  /** Error information */
+  
+  /** Result data (structured or unstructured) */
+  data?: any;
+  
+  /** Error information if failed */
   error?: {
-    code: number;
+    code: string;
     message: string;
     details?: any;
   };
-  /** Execution metadata */
-  metadata: {
-    executionTime: number;
-    timestamp: Date;
-    correlationId: string;
+  
+  /** Additional metadata about the invocation */
+  metadata?: {
+    duration?: number;
+    timestamp?: string;
+    [key: string]: any;
   };
 }
 
 /**
- * Abstract base class for tool wrappers
+ * Abstract Tool Base Class
+ * 
+ * All tool wrappers must extend this class and implement the required methods.
+ * 
+ * Responsibilities:
+ * - Provide tool metadata and schema information
+ * - Implement tool invocation logic
+ * - Handle schema validation and error handling
+ * - Support both synchronous and asynchronous execution
  */
-export abstract class Tool<TInput = any, TOutput = any> {
-  protected validator: SchemaValidator;
-  
-  constructor(protected metadata: ToolMetadata) {
-    this.validator = new SchemaValidator();
+export abstract class Tool {
+  protected metadata: ToolMetadata;
+
+  constructor(metadata: ToolMetadata) {
+    this.validateMetadata(metadata);
+    this.metadata = metadata;
   }
 
   /**
    * Get tool metadata
+   * @returns Tool metadata
    */
   getMetadata(): ToolMetadata {
     return { ...this.metadata };
   }
 
   /**
-   * Get input schema (JSON Schema)
+   * Get input schema for the tool
+   * @returns JSON Schema for input validation
    */
-  abstract getInputSchema(): any;
+  abstract getInputSchema(): JSONSchema;
 
   /**
-   * Get output schema (JSON Schema)
+   * Get output schema for the tool (optional)
+   * @returns JSON Schema for output validation, or null if not applicable
    */
-  abstract getOutputSchema(): any;
-
-  /**
-   * Execute the tool with validation
-   */
-  async execute(input: TInput, context: ToolContext): Promise<ToolResult<TOutput>> {
-    const startTime = Date.now();
-    
-    try {
-      // Validate input
-      const inputValidation = await this.validator.validate(
-        input,
-        this.getInputSchema()
-      );
-      
-      if (!inputValidation.valid) {
-        throw new SchemaValidationError(
-          'Input validation failed',
-          inputValidation.errors || [],
-          context.correlationId
-        );
-      }
-
-      // Execute tool logic
-      const result = await this.invoke(input, context);
-
-      // Validate output
-      const outputValidation = await this.validator.validate(
-        result,
-        this.getOutputSchema()
-      );
-      
-      if (!outputValidation.valid) {
-        throw new SchemaValidationError(
-          'Output validation failed',
-          outputValidation.errors || [],
-          context.correlationId
-        );
-      }
-
-      const executionTime = Date.now() - startTime;
-
-      return {
-        success: true,
-        data: result,
-        metadata: {
-          executionTime,
-          timestamp: new Date(),
-          correlationId: context.correlationId
-        }
-      };
-    } catch (error: any) {
-      const executionTime = Date.now() - startTime;
-      
-      return {
-        success: false,
-        error: {
-          code: error.code || -32603,
-          message: error.message,
-          details: error.data
-        },
-        metadata: {
-          executionTime,
-          timestamp: new Date(),
-          correlationId: context.correlationId
-        }
-      };
-    }
+  getOutputSchema(): JSONSchema | null {
+    return null;
   }
 
   /**
-   * Core tool implementation (to be overridden by subclasses)
+   * Get credential requirements for the tool
+   * @returns Array of credential requirements, or empty array if none
    */
-  protected abstract invoke(input: TInput, context: ToolContext): Promise<TOutput>;
-
-  /**
-   * Lifecycle hooks
-   */
-  async onBeforeInvoke?(input: TInput, context: ToolContext): Promise<void>;
-  async onAfterInvoke?(result: TOutput, context: ToolContext): Promise<void>;
-  async onError?(error: Error, context: ToolContext): Promise<void>;
-
-  /**
-   * Check if tool supports a capability
-   */
-  hasCapability(capability: string): boolean {
-    return this.metadata.capabilities?.includes(capability) || false;
+  getCredentialRequirements(): CredentialRequirement[] {
+    return [];
   }
 
   /**
-   * Check if tool is deprecated
+   * Invoke the tool with given parameters
+   * @param params Tool invocation parameters
+   * @param credentials Credentials for the tool (if required)
+   * @param context Optional invocation context
+   * @returns Tool invocation result
    */
-  isDeprecated(): boolean {
-    return this.metadata.deprecated || false;
-  }
-
-  /**
-   * Get deprecation message
-   */
-  getDeprecationMessage(): string | undefined {
-    return this.metadata.deprecationMessage;
-  }
-}
-
-/**
- * Tool factory interface
- */
-export interface ToolFactory {
-  /**
-   * Create a tool instance
-   */
-  createTool(config?: any): Tool;
-  
-  /**
-   * Get tool metadata without instantiation
-   */
-  getToolMetadata(): ToolMetadata;
-}
-
-/**
- * Tool descriptor for registry
- */
-export interface ToolDescriptor {
-  metadata: ToolMetadata;
-  factory: ToolFactory;
-  inputSchema: any;
-  outputSchema: any;
-}
-
-/**
- * Utility functions for tool management
- */
-export class ToolUtils {
-  /**
-   * Generate correlation ID
-   */
-  static generateCorrelationId(): string {
-    return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-  }
-
-  /**
-   * Create tool context
-   */
-  static createContext(options: Partial<ToolContext> = {}): ToolContext {
-    return {
-      correlationId: options.correlationId || this.generateCorrelationId(),
-      userId: options.userId,
-      sessionId: options.sessionId,
-      timestamp: options.timestamp || new Date(),
-      metadata: options.metadata || {}
-    };
-  }
+  abstract invoke(
+    params: Record<string, any>,
+    credentials?: any,
+    context?: ToolContext
+  ): Promise<ToolInvocationResult>;
 
   /**
    * Validate tool metadata
    */
-  static validateMetadata(metadata: ToolMetadata): boolean {
-    return !!(
-      metadata.name &&
-      metadata.title &&
-      metadata.description &&
-      metadata.version &&
-      metadata.adapter
-    );
+  private validateMetadata(metadata: ToolMetadata): void {
+    if (!metadata.name) {
+      throw new SDKError(
+        ErrorCode.INVALID_TOOL_METADATA,
+        'Tool name is required'
+      );
+    }
+
+    if (!metadata.title) {
+      throw new SDKError(
+        ErrorCode.INVALID_TOOL_METADATA,
+        'Tool title is required'
+      );
+    }
+
+    if (!metadata.description) {
+      throw new SDKError(
+        ErrorCode.INVALID_TOOL_METADATA,
+        'Tool description is required'
+      );
+    }
+
+    if (!metadata.version) {
+      throw new SDKError(
+        ErrorCode.INVALID_TOOL_METADATA,
+        'Tool version is required'
+      );
+    }
   }
 
   /**
-   * Compare tool versions
+   * Create a success result
    */
-  static compareVersions(v1: string, v2: string): number {
-    const parts1 = v1.split('.').map(Number);
-    const parts2 = v2.split('.').map(Number);
-    
-    for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
-      const p1 = parts1[i] || 0;
-      const p2 = parts2[i] || 0;
-      
-      if (p1 > p2) return 1;
-      if (p1 < p2) return -1;
-    }
-    
-    return 0;
+  protected createSuccessResult(
+    data: any,
+    metadata?: Record<string, any>
+  ): ToolInvocationResult {
+    return {
+      success: true,
+      data,
+      metadata: {
+        timestamp: new Date().toISOString(),
+        ...metadata
+      }
+    };
   }
+
+  /**
+   * Create an error result
+   */
+  protected createErrorResult(
+    code: string,
+    message: string,
+    details?: any
+  ): ToolInvocationResult {
+    return {
+      success: false,
+      error: {
+        code,
+        message,
+        details
+      },
+      metadata: {
+        timestamp: new Date().toISOString()
+      }
+    };
+  }
+
+  /**
+   * Wrap an async operation with error handling
+   */
+  protected async wrapInvocation<T>(
+    operation: () => Promise<T>,
+    errorCode: string = ErrorCode.TOOL_EXECUTION_FAILED
+  ): Promise<T> {
+    try {
+      return await operation();
+    } catch (error) {
+      if (error instanceof SDKError) {
+        throw error;
+      }
+
+      throw new SDKError(
+        errorCode,
+        `Tool execution failed: ${error.message}`,
+        error
+      );
+    }
+  }
+}
+
+/**
+ * Simple tool implementation helper
+ * For creating tools without extending the base class
+ */
+export class SimpleTool extends Tool {
+  private inputSchema: JSONSchema;
+  private outputSchema: JSONSchema | null;
+  private credentialRequirements: CredentialRequirement[];
+  private invokeHandler: (
+    params: Record<string, any>,
+    credentials?: any,
+    context?: ToolContext
+  ) => Promise<ToolInvocationResult>;
+
+  constructor(
+    metadata: ToolMetadata,
+    inputSchema: JSONSchema,
+    invokeHandler: (
+      params: Record<string, any>,
+      credentials?: any,
+      context?: ToolContext
+    ) => Promise<ToolInvocationResult>,
+    options?: {
+      outputSchema?: JSONSchema;
+      credentialRequirements?: CredentialRequirement[];
+    }
+  ) {
+    super(metadata);
+    this.inputSchema = inputSchema;
+    this.outputSchema = options?.outputSchema || null;
+    this.credentialRequirements = options?.credentialRequirements || [];
+    this.invokeHandler = invokeHandler;
+  }
+
+  getInputSchema(): JSONSchema {
+    return this.inputSchema;
+  }
+
+  getOutputSchema(): JSONSchema | null {
+    return this.outputSchema;
+  }
+
+  getCredentialRequirements(): CredentialRequirement[] {
+    return this.credentialRequirements;
+  }
+
+  async invoke(
+    params: Record<string, any>,
+    credentials?: any,
+    context?: ToolContext
+  ): Promise<ToolInvocationResult> {
+    return this.invokeHandler(params, credentials, context);
+  }
+}
+
+/**
+ * Tool builder for fluent API
+ */
+export class ToolBuilder {
+  private metadata: Partial<ToolMetadata> = {};
+  private inputSchema?: JSONSchema;
+  private outputSchema?: JSONSchema;
+  private credentialRequirements: CredentialRequirement[] = [];
+  private invokeHandler?: (
+    params: Record<string, any>,
+    credentials?: any,
+    context?: ToolContext
+  ) => Promise<ToolInvocationResult>;
+
+  /**
+   * Set tool name
+   */
+  name(name: string): this {
+    this.metadata.name = name;
+    return this;
+  }
+
+  /**
+   * Set tool title
+   */
+  title(title: string): this {
+    this.metadata.title = title;
+    return this;
+  }
+
+  /**
+   * Set tool description
+   */
+  description(description: string): this {
+    this.metadata.description = description;
+    return this;
+  }
+
+  /**
+   * Set tool version
+   */
+  version(version: string): this {
+    this.metadata.version = version;
+    return this;
+  }
+
+  /**
+   * Set tool adapter
+   */
+  adapter(adapter: string): this {
+    this.metadata.adapter = adapter;
+    return this;
+  }
+
+  /**
+   * Set tool capabilities
+   */
+  capabilities(capabilities: string[]): this {
+    this.metadata.capabilities = capabilities;
+    return this;
+  }
+
+  /**
+   * Set input schema
+   */
+  input(schema: JSONSchema): this {
+    this.inputSchema = schema;
+    return this;
+  }
+
+  /**
+   * Set output schema
+   */
+  output(schema: JSONSchema): this {
+    this.outputSchema = schema;
+    return this;
+  }
+
+  /**
+   * Add credential requirement
+   */
+  requireCredential(
+    key: string,
+    options?: {
+      scope?: string;
+      required?: boolean;
+      description?: string;
+    }
+  ): this {
+    this.credentialRequirements.push({
+      key,
+      scope: options?.scope,
+      required: options?.required !== false,
+      description: options?.description
+    });
+    return this;
+  }
+
+  /**
+   * Set invoke handler
+   */
+  handler(
+    handler: (
+      params: Record<string, any>,
+      credentials?: any,
+      context?: ToolContext
+    ) => Promise<ToolInvocationResult>
+  ): this {
+    this.invokeHandler = handler;
+    return this;
+  }
+
+  /**
+   * Build the tool
+   */
+  build(): Tool {
+    if (!this.metadata.name) {
+      throw new SDKError(ErrorCode.INVALID_TOOL_METADATA, 'Tool name is required');
+    }
+
+    if (!this.metadata.title) {
+      throw new SDKError(ErrorCode.INVALID_TOOL_METADATA, 'Tool title is required');
+    }
+
+    if (!this.metadata.description) {
+      throw new SDKError(
+        ErrorCode.INVALID_TOOL_METADATA,
+        'Tool description is required'
+      );
+    }
+
+    if (!this.metadata.version) {
+      this.metadata.version = '1.0.0';
+    }
+
+    if (!this.inputSchema) {
+      throw new SDKError(
+        ErrorCode.INVALID_TOOL_METADATA,
+        'Input schema is required'
+      );
+    }
+
+    if (!this.invokeHandler) {
+      throw new SDKError(
+        ErrorCode.INVALID_TOOL_METADATA,
+        'Invoke handler is required'
+      );
+    }
+
+    return new SimpleTool(
+      this.metadata as ToolMetadata,
+      this.inputSchema,
+      this.invokeHandler,
+      {
+        outputSchema: this.outputSchema,
+        credentialRequirements: this.credentialRequirements
+      }
+    );
+  }
+}
+
+/**
+ * Create a new tool builder
+ */
+export function createTool(): ToolBuilder {
+  return new ToolBuilder();
 }

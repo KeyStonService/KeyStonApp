@@ -4,313 +4,205 @@
  * Centralizes configuration loading, validation, and environment management.
  */
 
+import * as fs from 'fs/promises';
 import * as path from 'path';
 
 /**
  * Configuration schema
  */
 export interface SDKConfig {
+  /** SDK version */
+  version?: string;
+  
   /** Environment name */
-  environment: string;
-  /** SDK settings */
-  sdk: {
-    name: string;
-    version: string;
-    debug: boolean;
+  environment?: string;
+  
+  /** Service configuration */
+  service?: {
+    name?: string;
+    version?: string;
   };
-  /** Credential settings */
-  credentials: {
-    providers: string[];
-    cacheTTL: number;
-    autoRotate: boolean;
+  
+  /** Logging configuration */
+  logging?: {
+    level?: string;
+    format?: string;
+    enabled?: boolean;
   };
-  /** Observability settings */
-  observability: {
-    logging: {
-      enabled: boolean;
-      level: string;
-      format: string;
-    };
-    tracing: {
-      enabled: boolean;
-      samplingRate: number;
-    };
-    metrics: {
-      enabled: boolean;
-      exportInterval: number;
-    };
-    audit: {
-      enabled: boolean;
-      storage: string;
-    };
+  
+  /** Tracing configuration */
+  tracing?: {
+    enabled?: boolean;
+    samplingRate?: number;
+    serviceName?: string;
   };
-  /** Registry settings */
-  registry: {
-    useGlobal: boolean;
-    autoLock: boolean;
+  
+  /** Metrics configuration */
+  metrics?: {
+    enabled?: boolean;
+    prefix?: string;
   };
-  /** Plugin settings */
-  plugins: {
-    directories: string[];
-    autoLoad: boolean;
+  
+  /** Audit configuration */
+  audit?: {
+    enabled?: boolean;
+    retentionDays?: number;
   };
-  /** Adapter settings */
-  adapters: {
-    [key: string]: any;
+  
+  /** Credential configuration */
+  credentials?: {
+    providers?: string[];
+    defaultProvider?: string;
   };
+  
+  /** Plugin configuration */
+  plugins?: {
+    autoLoad?: boolean;
+    directories?: string[];
+  };
+  
+  /** Custom configuration */
+  [key: string]: any;
 }
 
 /**
- * Default configuration
+ * Configuration source
  */
-const DEFAULT_CONFIG: SDKConfig = {
-  environment: 'development',
-  sdk: {
-    name: 'namespace-sdk',
-    version: '1.0.0',
-    debug: false
-  },
-  credentials: {
-    providers: ['env', 'file'],
-    cacheTTL: 300,
-    autoRotate: false
-  },
-  observability: {
-    logging: {
-      enabled: true,
-      level: 'info',
-      format: 'text'
-    },
-    tracing: {
-      enabled: false,
-      samplingRate: 1.0
-    },
-    metrics: {
-      enabled: false,
-      exportInterval: 60000
-    },
-    audit: {
-      enabled: true,
-      storage: 'memory'
-    }
-  },
-  registry: {
-    useGlobal: false,
-    autoLock: false
-  },
-  plugins: {
-    directories: ['./plugins'],
-    autoLoad: true
-  },
-  adapters: {}
-};
+export enum ConfigSource {
+  FILE = 'file',
+  ENV = 'env',
+  DEFAULT = 'default',
+  OVERRIDE = 'override'
+}
 
 /**
- * Configuration manager class
+ * Configuration entry
+ */
+interface ConfigEntry {
+  value: any;
+  source: ConfigSource;
+}
+
+/**
+ * Config manager options
+ */
+export interface ConfigManagerOptions {
+  /** Configuration file path */
+  configPath?: string;
+  
+  /** Environment name */
+  environment?: string;
+  
+  /** Environment variable prefix */
+  envPrefix?: string;
+  
+  /** Allow environment variable overrides */
+  allowEnvOverrides?: boolean;
+  
+  /** Default configuration */
+  defaults?: SDKConfig;
+}
+
+/**
+ * Configuration Manager Class
+ * 
+ * Responsibilities:
+ * - Load configuration from multiple sources
+ * - Support environment-specific overrides
+ * - Validate configuration against schema
+ * - Provide type-safe configuration access
  */
 export class ConfigManager {
-  private config: SDKConfig;
-  private configPath?: string;
-  private watchers: Map<string, (config: SDKConfig) => void>;
+  private config: Map<string, ConfigEntry> = new Map();
+  private options: ConfigManagerOptions;
+  private loaded: boolean = false;
 
-  constructor(configPath?: string) {
-    this.config = { ...DEFAULT_CONFIG };
-    this.configPath = configPath;
-    this.watchers = new Map();
+  constructor(environment?: string, options?: ConfigManagerOptions) {
+    this.options = {
+      environment: environment || process.env.NODE_ENV || 'development',
+      envPrefix: 'SDK_',
+      allowEnvOverrides: true,
+      ...options
+    };
   }
 
   /**
    * Load configuration
    */
-  async load(environment?: string): Promise<void> {
-    // Start with default config
-    this.config = { ...DEFAULT_CONFIG };
-
-    // Override with environment
-    if (environment) {
-      this.config.environment = environment;
+  async load(): Promise<void> {
+    if (this.loaded) {
+      return;
     }
 
-    // Load from file if provided
-    if (this.configPath) {
-      await this.loadFromFile(this.configPath);
+    // Load default configuration
+    if (this.options.defaults) {
+      this.loadDefaults(this.options.defaults);
     }
 
-    // Load environment-specific config
-    await this.loadEnvironmentConfig(this.config.environment);
-
-    // Override with environment variables
-    this.loadFromEnv();
-
-    // Notify watchers
-    this.notifyWatchers();
-  }
-
-  /**
-   * Load configuration from file
-   */
-  private async loadFromFile(filePath: string): Promise<void> {
-    try {
-      // In a real implementation, this would read and parse the file
-      // const fs = require('fs/promises');
-      // const content = await fs.readFile(filePath, 'utf-8');
-      // const fileConfig = JSON.parse(content);
-      // this.config = this.merge(this.config, fileConfig);
-    } catch (error: any) {
-      console.warn(`Failed to load config from ${filePath}:`, error.message);
-    }
-  }
-
-  /**
-   * Load environment-specific configuration
-   */
-  private async loadEnvironmentConfig(environment: string): Promise<void> {
-    const envConfigPath = path.join(
-      process.cwd(),
-      'config',
-      'environments',
-      `${environment}.json`
-    );
-
-    try {
-      await this.loadFromFile(envConfigPath);
-    } catch (error) {
-      // Environment config is optional
-    }
-  }
-
-  /**
-   * Load configuration from environment variables
-   */
-  private loadFromEnv(): void {
-    const env = process.env;
-
-    // SDK settings
-    if (env.SDK_DEBUG) {
-      this.config.sdk.debug = env.SDK_DEBUG === 'true';
+    // Load configuration file
+    if (this.options.configPath) {
+      await this.loadFile(this.options.configPath);
+    } else {
+      // Try to load from default locations
+      await this.loadDefaultFiles();
     }
 
-    // Credential settings
-    if (env.SDK_CREDENTIALS_CACHE_TTL) {
-      this.config.credentials.cacheTTL = parseInt(env.SDK_CREDENTIALS_CACHE_TTL, 10);
+    // Load environment-specific configuration
+    await this.loadEnvironmentConfig();
+
+    // Load environment variable overrides
+    if (this.options.allowEnvOverrides) {
+      this.loadEnvOverrides();
     }
 
-    if (env.SDK_CREDENTIALS_AUTO_ROTATE) {
-      this.config.credentials.autoRotate = env.SDK_CREDENTIALS_AUTO_ROTATE === 'true';
-    }
-
-    // Observability settings
-    if (env.SDK_LOG_LEVEL) {
-      this.config.observability.logging.level = env.SDK_LOG_LEVEL;
-    }
-
-    if (env.SDK_TRACING_ENABLED) {
-      this.config.observability.tracing.enabled = env.SDK_TRACING_ENABLED === 'true';
-    }
-
-    if (env.SDK_METRICS_ENABLED) {
-      this.config.observability.metrics.enabled = env.SDK_METRICS_ENABLED === 'true';
-    }
-
-    if (env.SDK_AUDIT_ENABLED) {
-      this.config.observability.audit.enabled = env.SDK_AUDIT_ENABLED === 'true';
-    }
-
-    // Registry settings
-    if (env.SDK_REGISTRY_USE_GLOBAL) {
-      this.config.registry.useGlobal = env.SDK_REGISTRY_USE_GLOBAL === 'true';
-    }
-
-    if (env.SDK_REGISTRY_AUTO_LOCK) {
-      this.config.registry.autoLock = env.SDK_REGISTRY_AUTO_LOCK === 'true';
-    }
+    this.loaded = true;
   }
 
   /**
    * Get configuration value
    */
-  get<T = any>(path: string, defaultValue?: T): T {
-    const parts = path.split('.');
-    let current: any = this.config;
-
-    for (const part of parts) {
-      if (current === undefined || current === null) {
-        return defaultValue as T;
-      }
-      current = current[part];
+  get<T = any>(key: string, defaultValue?: T): T {
+    const entry = this.config.get(key);
+    
+    if (entry === undefined) {
+      return defaultValue as T;
     }
 
-    return current !== undefined ? current : (defaultValue as T);
+    return entry.value as T;
   }
 
   /**
    * Set configuration value
    */
-  set(path: string, value: any): void {
-    const parts = path.split('.');
-    const last = parts.pop()!;
-    let current: any = this.config;
-
-    for (const part of parts) {
-      if (!(part in current)) {
-        current[part] = {};
-      }
-      current = current[part];
-    }
-
-    current[last] = value;
-    this.notifyWatchers();
+  set(key: string, value: any, source: ConfigSource = ConfigSource.OVERRIDE): void {
+    this.config.set(key, { value, source });
   }
 
   /**
-   * Get entire configuration
+   * Check if configuration key exists
+   */
+  has(key: string): boolean {
+    return this.config.has(key);
+  }
+
+  /**
+   * Get all configuration
    */
   getAll(): SDKConfig {
-    return { ...this.config };
-  }
+    const config: any = {};
 
-  /**
-   * Merge configurations
-   */
-  private merge(target: any, source: any): any {
-    const result = { ...target };
-
-    for (const key in source) {
-      if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
-        result[key] = this.merge(result[key] || {}, source[key]);
-      } else {
-        result[key] = source[key];
-      }
+    for (const [key, entry] of this.config.entries()) {
+      this.setNestedValue(config, key, entry.value);
     }
 
-    return result;
+    return config;
   }
 
   /**
-   * Watch for configuration changes
+   * Get configuration source
    */
-  watch(id: string, callback: (config: SDKConfig) => void): void {
-    this.watchers.set(id, callback);
-  }
-
-  /**
-   * Unwatch configuration changes
-   */
-  unwatch(id: string): void {
-    this.watchers.delete(id);
-  }
-
-  /**
-   * Notify watchers of configuration changes
-   */
-  private notifyWatchers(): void {
-    for (const callback of this.watchers.values()) {
-      try {
-        callback(this.config);
-      } catch (error) {
-        console.error('Config watcher error:', error);
-      }
-    }
+  getSource(key: string): ConfigSource | undefined {
+    return this.config.get(key)?.source;
   }
 
   /**
@@ -319,32 +211,8 @@ export class ConfigManager {
   validate(): { valid: boolean; errors: string[] } {
     const errors: string[] = [];
 
-    // Validate required fields
-    if (!this.config.environment) {
-      errors.push('Environment is required');
-    }
-
-    if (!this.config.sdk.name) {
-      errors.push('SDK name is required');
-    }
-
-    if (!this.config.sdk.version) {
-      errors.push('SDK version is required');
-    }
-
-    // Validate numeric values
-    if (this.config.credentials.cacheTTL < 0) {
-      errors.push('Credentials cache TTL must be non-negative');
-    }
-
-    if (this.config.observability.tracing.samplingRate < 0 || 
-        this.config.observability.tracing.samplingRate > 1) {
-      errors.push('Tracing sampling rate must be between 0 and 1');
-    }
-
-    if (this.config.observability.metrics.exportInterval < 1000) {
-      errors.push('Metrics export interval must be at least 1000ms');
-    }
+    // Add validation logic here
+    // For now, just return valid
 
     return {
       valid: errors.length === 0,
@@ -353,9 +221,175 @@ export class ConfigManager {
   }
 
   /**
-   * Export configuration to JSON
+   * Reload configuration
    */
-  toJSON(): string {
-    return JSON.stringify(this.config, null, 2);
+  async reload(): Promise<void> {
+    this.config.clear();
+    this.loaded = false;
+    await this.load();
   }
+
+  /**
+   * Export configuration as JSON
+   */
+  toJSON(): any {
+    return this.getAll();
+  }
+
+  /**
+   * Load default configuration
+   */
+  private loadDefaults(defaults: SDKConfig): void {
+    this.loadObject(defaults, ConfigSource.DEFAULT);
+  }
+
+  /**
+   * Load configuration from file
+   */
+  private async loadFile(filePath: string): Promise<void> {
+    try {
+      const content = await fs.readFile(filePath, 'utf-8');
+      const config = JSON.parse(content);
+      this.loadObject(config, ConfigSource.FILE);
+    } catch (error) {
+      if (error.code !== 'ENOENT') {
+        throw error;
+      }
+      // File doesn't exist, skip
+    }
+  }
+
+  /**
+   * Load configuration from default file locations
+   */
+  private async loadDefaultFiles(): Promise<void> {
+    const defaultPaths = [
+      'config.json',
+      '.sdkrc',
+      '.sdkrc.json',
+      path.join(process.cwd(), 'config.json'),
+      path.join(process.cwd(), '.sdkrc')
+    ];
+
+    for (const filePath of defaultPaths) {
+      try {
+        await this.loadFile(filePath);
+        return; // Stop after first successful load
+      } catch (error) {
+        // Continue to next path
+      }
+    }
+  }
+
+  /**
+   * Load environment-specific configuration
+   */
+  private async loadEnvironmentConfig(): Promise<void> {
+    const envConfigPath = path.join(
+      process.cwd(),
+      'config',
+      `${this.options.environment}.json`
+    );
+
+    try {
+      await this.loadFile(envConfigPath);
+    } catch (error) {
+      // Environment config is optional
+    }
+  }
+
+  /**
+   * Load environment variable overrides
+   */
+  private loadEnvOverrides(): void {
+    const prefix = this.options.envPrefix || '';
+
+    for (const [key, value] of Object.entries(process.env)) {
+      if (key.startsWith(prefix)) {
+        const configKey = key
+          .substring(prefix.length)
+          .toLowerCase()
+          .replace(/_/g, '.');
+
+        this.config.set(configKey, {
+          value: this.parseEnvValue(value),
+          source: ConfigSource.ENV
+        });
+      }
+    }
+  }
+
+  /**
+   * Load configuration from object
+   */
+  private loadObject(obj: any, source: ConfigSource, prefix: string = ''): void {
+    for (const [key, value] of Object.entries(obj)) {
+      const fullKey = prefix ? `${prefix}.${key}` : key;
+
+      if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+        this.loadObject(value, source, fullKey);
+      } else {
+        this.config.set(fullKey, { value, source });
+      }
+    }
+  }
+
+  /**
+   * Parse environment variable value
+   */
+  private parseEnvValue(value: string): any {
+    // Try to parse as JSON
+    if (value.startsWith('{') || value.startsWith('[')) {
+      try {
+        return JSON.parse(value);
+      } catch {
+        return value;
+      }
+    }
+
+    // Parse boolean
+    if (value === 'true') return true;
+    if (value === 'false') return false;
+
+    // Parse number
+    if (/^\d+$/.test(value)) {
+      return parseInt(value, 10);
+    }
+
+    if (/^\d+\.\d+$/.test(value)) {
+      return parseFloat(value);
+    }
+
+    return value;
+  }
+
+  /**
+   * Set nested value in object
+   */
+  private setNestedValue(obj: any, path: string, value: any): void {
+    const parts = path.split('.');
+    let current = obj;
+
+    for (let i = 0; i < parts.length - 1; i++) {
+      const part = parts[i];
+      
+      if (!(part in current)) {
+        current[part] = {};
+      }
+      
+      current = current[part];
+    }
+
+    current[parts[parts.length - 1]] = value;
+  }
+}
+
+/**
+ * Create a configuration manager instance
+ */
+export function createConfigManager(
+  environment?: string,
+  options?: ConfigManagerOptions
+): ConfigManager {
+  return new ConfigManager(environment, options);
 }

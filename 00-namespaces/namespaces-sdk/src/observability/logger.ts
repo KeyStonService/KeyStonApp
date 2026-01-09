@@ -1,7 +1,7 @@
 /**
  * Structured Logger
  * 
- * Implements structured, configurable logging for all SDK operations.
+ * Provides structured, configurable logging for all SDK operations.
  */
 
 /**
@@ -16,133 +16,77 @@ export enum LogLevel {
 }
 
 /**
- * Log entry interface
+ * Log entry
  */
 export interface LogEntry {
-  timestamp: Date;
+  /** Log level */
   level: LogLevel;
-  logger: string;
+  
+  /** Log message */
   message: string;
+  
+  /** Timestamp */
+  timestamp: Date;
+  
+  /** Additional context */
   context?: Record<string, any>;
+  
+  /** Error object if applicable */
   error?: Error;
+  
+  /** Correlation ID for tracing */
   correlationId?: string;
 }
 
 /**
- * Logger configuration
+ * Logger options
  */
-export interface LoggerConfig {
+export interface LoggerOptions {
+  /** Minimum log level */
   level?: LogLevel;
+  
+  /** Enable debug logging */
   debug?: boolean;
+  
+  /** Enable logging */
+  enabled?: boolean;
+  
+  /** Log output format */
   format?: 'json' | 'text';
-  outputs?: LogOutput[];
+  
+  /** Include timestamps */
   includeTimestamp?: boolean;
-  includeLevel?: boolean;
-  includeLogger?: boolean;
+  
+  /** Include stack traces for errors */
+  includeStackTrace?: boolean;
+  
+  /** Custom log handler */
+  handler?: (entry: LogEntry) => void;
 }
 
 /**
- * Log output interface
- */
-export interface LogOutput {
-  write(entry: LogEntry): void | Promise<void>;
-}
-
-/**
- * Console log output
- */
-export class ConsoleOutput implements LogOutput {
-  write(entry: LogEntry): void {
-    const level = LogLevel[entry.level];
-    const timestamp = entry.timestamp.toISOString();
-    const message = `[${timestamp}] [${level}] [${entry.logger}] ${entry.message}`;
-    
-    const context = entry.context ? ` ${JSON.stringify(entry.context)}` : '';
-    const fullMessage = message + context;
-
-    switch (entry.level) {
-      case LogLevel.DEBUG:
-      case LogLevel.INFO:
-        console.log(fullMessage);
-        break;
-      case LogLevel.WARN:
-        console.warn(fullMessage);
-        break;
-      case LogLevel.ERROR:
-      case LogLevel.FATAL:
-        console.error(fullMessage);
-        if (entry.error) {
-          console.error(entry.error);
-        }
-        break;
-    }
-  }
-}
-
-/**
- * File log output
- */
-export class FileOutput implements LogOutput {
-  private filePath: string;
-  private buffer: LogEntry[];
-  private flushInterval: NodeJS.Timeout | null;
-
-  constructor(filePath: string, flushIntervalMs: number = 5000) {
-    this.filePath = filePath;
-    this.buffer = [];
-    this.flushInterval = setInterval(() => this.flush(), flushIntervalMs);
-  }
-
-  write(entry: LogEntry): void {
-    this.buffer.push(entry);
-    
-    // Auto-flush on error or fatal
-    if (entry.level >= LogLevel.ERROR) {
-      this.flush();
-    }
-  }
-
-  private async flush(): Promise<void> {
-    if (this.buffer.length === 0) return;
-
-    const entries = this.buffer.splice(0);
-    const lines = entries.map(e => JSON.stringify(e)).join('\n') + '\n';
-
-    // In a real implementation, this would write to file
-    // const fs = require('fs/promises');
-    // await fs.appendFile(this.filePath, lines);
-  }
-
-  async shutdown(): Promise<void> {
-    if (this.flushInterval) {
-      clearInterval(this.flushInterval);
-      this.flushInterval = null;
-    }
-    await this.flush();
-  }
-}
-
-/**
- * Logger class
+ * Logger Class
+ * 
+ * Responsibilities:
+ * - Provide structured logging with multiple levels
+ * - Support context and correlation IDs
+ * - Format logs for different outputs
+ * - Integrate with external logging systems
  */
 export class Logger {
-  private name: string;
-  private config: LoggerConfig;
-  private outputs: LogOutput[];
+  private options: Required<LoggerOptions>;
+  private buffer: LogEntry[] = [];
 
-  constructor(name: string, config: LoggerConfig = {}) {
-    this.name = name;
-    this.config = {
-      level: config.debug ? LogLevel.DEBUG : LogLevel.INFO,
-      format: 'text',
-      includeTimestamp: true,
-      includeLevel: true,
-      includeLogger: true,
-      ...config
+  constructor(options: LoggerOptions = {}) {
+    this.options = {
+      level: options.debug ? LogLevel.DEBUG : LogLevel.INFO,
+      debug: options.debug || false,
+      enabled: options.enabled !== false,
+      format: options.format || 'json',
+      includeTimestamp: options.includeTimestamp !== false,
+      includeStackTrace: options.includeStackTrace !== false,
+      handler: options.handler || this.defaultHandler.bind(this)
     };
-
-    // Initialize outputs
-    this.outputs = config.outputs || [new ConsoleOutput()];
   }
 
   /**
@@ -170,124 +114,201 @@ export class Logger {
    * Log an error message
    */
   error(message: string, error?: Error | any, context?: Record<string, any>): void {
-    const entry: LogEntry = {
-      timestamp: new Date(),
-      level: LogLevel.ERROR,
-      logger: this.name,
-      message,
-      context,
-      error: error instanceof Error ? error : undefined
-    };
-
-    this.write(entry);
+    const errorObj = error instanceof Error ? error : undefined;
+    const errorContext = error && !(error instanceof Error) ? error : undefined;
+    
+    this.log(LogLevel.ERROR, message, {
+      ...context,
+      ...errorContext
+    }, errorObj);
   }
 
   /**
-   * Log a fatal message
+   * Log a fatal error message
    */
   fatal(message: string, error?: Error | any, context?: Record<string, any>): void {
-    const entry: LogEntry = {
-      timestamp: new Date(),
-      level: LogLevel.FATAL,
-      logger: this.name,
-      message,
-      context,
-      error: error instanceof Error ? error : undefined
+    const errorObj = error instanceof Error ? error : undefined;
+    const errorContext = error && !(error instanceof Error) ? error : undefined;
+    
+    this.log(LogLevel.FATAL, message, {
+      ...context,
+      ...errorContext
+    }, errorObj);
+  }
+
+  /**
+   * Create a child logger with additional context
+   */
+  child(context: Record<string, any>): Logger {
+    const childLogger = new Logger(this.options);
+    childLogger.options.handler = (entry: LogEntry) => {
+      this.log(entry.level, entry.message, {
+        ...context,
+        ...entry.context
+      }, entry.error);
     };
-
-    this.write(entry);
-  }
-
-  /**
-   * Core log method
-   */
-  private log(level: LogLevel, message: string, context?: Record<string, any>): void {
-    if (level < (this.config.level || LogLevel.INFO)) {
-      return;
-    }
-
-    const entry: LogEntry = {
-      timestamp: new Date(),
-      level,
-      logger: this.name,
-      message,
-      context
-    };
-
-    this.write(entry);
-  }
-
-  /**
-   * Write log entry to outputs
-   */
-  private write(entry: LogEntry): void {
-    for (const output of this.outputs) {
-      try {
-        output.write(entry);
-      } catch (error) {
-        console.error('Failed to write log entry:', error);
-      }
-    }
-  }
-
-  /**
-   * Create child logger
-   */
-  child(name: string): Logger {
-    return new Logger(`${this.name}.${name}`, this.config);
+    return childLogger;
   }
 
   /**
    * Set log level
    */
   setLevel(level: LogLevel): void {
-    this.config.level = level;
+    this.options.level = level;
   }
 
   /**
-   * Get log level
+   * Get current log level
    */
   getLevel(): LogLevel {
-    return this.config.level || LogLevel.INFO;
+    return this.options.level;
   }
 
   /**
-   * Add output
+   * Enable or disable logging
    */
-  addOutput(output: LogOutput): void {
-    this.outputs.push(output);
+  setEnabled(enabled: boolean): void {
+    this.options.enabled = enabled;
   }
 
   /**
-   * Shutdown logger
+   * Check if logging is enabled
    */
-  async shutdown(): Promise<void> {
-    for (const output of this.outputs) {
-      if (output instanceof FileOutput) {
-        await output.shutdown();
-      }
+  isEnabled(): boolean {
+    return this.options.enabled;
+  }
+
+  /**
+   * Flush buffered logs
+   */
+  async flush(): Promise<void> {
+    // Flush any buffered logs
+    this.buffer = [];
+  }
+
+  /**
+   * Core logging method
+   */
+  private log(
+    level: LogLevel,
+    message: string,
+    context?: Record<string, any>,
+    error?: Error
+  ): void {
+    if (!this.options.enabled || level < this.options.level) {
+      return;
+    }
+
+    const entry: LogEntry = {
+      level,
+      message,
+      timestamp: new Date(),
+      context,
+      error
+    };
+
+    this.options.handler(entry);
+  }
+
+  /**
+   * Default log handler
+   */
+  private defaultHandler(entry: LogEntry): void {
+    const formatted = this.format(entry);
+    
+    switch (entry.level) {
+      case LogLevel.DEBUG:
+      case LogLevel.INFO:
+        console.log(formatted);
+        break;
+      case LogLevel.WARN:
+        console.warn(formatted);
+        break;
+      case LogLevel.ERROR:
+      case LogLevel.FATAL:
+        console.error(formatted);
+        break;
     }
   }
-}
 
-/**
- * Global logger instance
- */
-let globalLogger: Logger | null = null;
-
-/**
- * Get or create global logger
- */
-export function getGlobalLogger(): Logger {
-  if (!globalLogger) {
-    globalLogger = new Logger('global');
+  /**
+   * Format log entry
+   */
+  private format(entry: LogEntry): string {
+    if (this.options.format === 'json') {
+      return this.formatJSON(entry);
+    } else {
+      return this.formatText(entry);
+    }
   }
-  return globalLogger;
+
+  /**
+   * Format as JSON
+   */
+  private formatJSON(entry: LogEntry): string {
+    const obj: any = {
+      level: LogLevel[entry.level],
+      message: entry.message
+    };
+
+    if (this.options.includeTimestamp) {
+      obj.timestamp = entry.timestamp.toISOString();
+    }
+
+    if (entry.context) {
+      obj.context = entry.context;
+    }
+
+    if (entry.error) {
+      obj.error = {
+        name: entry.error.name,
+        message: entry.error.message
+      };
+
+      if (this.options.includeStackTrace && entry.error.stack) {
+        obj.error.stack = entry.error.stack;
+      }
+    }
+
+    if (entry.correlationId) {
+      obj.correlationId = entry.correlationId;
+    }
+
+    return JSON.stringify(obj);
+  }
+
+  /**
+   * Format as text
+   */
+  private formatText(entry: LogEntry): string {
+    const parts: string[] = [];
+
+    if (this.options.includeTimestamp) {
+      parts.push(`[${entry.timestamp.toISOString()}]`);
+    }
+
+    parts.push(`[${LogLevel[entry.level]}]`);
+    parts.push(entry.message);
+
+    if (entry.context && Object.keys(entry.context).length > 0) {
+      parts.push(JSON.stringify(entry.context));
+    }
+
+    if (entry.error) {
+      parts.push(`Error: ${entry.error.message}`);
+      
+      if (this.options.includeStackTrace && entry.error.stack) {
+        parts.push(`\n${entry.error.stack}`);
+      }
+    }
+
+    return parts.join(' ');
+  }
 }
 
 /**
- * Set global logger
+ * Create a logger instance
  */
-export function setGlobalLogger(logger: Logger): void {
-  globalLogger = logger;
+export function createLogger(options?: LoggerOptions): Logger {
+  return new Logger(options);
 }

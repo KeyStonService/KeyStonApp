@@ -5,7 +5,7 @@
  */
 
 /**
- * Metric type
+ * Metric type enumeration
  */
 export enum MetricType {
   COUNTER = 'counter',
@@ -14,21 +14,38 @@ export enum MetricType {
 }
 
 /**
- * Metric interface
+ * Metric labels
  */
-export interface Metric {
+export type MetricLabels = Record<string, string>;
+
+/**
+ * Metric value
+ */
+export interface MetricValue {
+  /** Metric name */
   name: string;
+  
+  /** Metric type */
   type: MetricType;
+  
+  /** Metric value */
   value: number;
+  
+  /** Metric labels */
+  labels: MetricLabels;
+  
+  /** Timestamp */
   timestamp: Date;
-  labels?: Record<string, string>;
 }
 
 /**
  * Histogram bucket
  */
 export interface HistogramBucket {
-  le: number; // Less than or equal to
+  /** Upper bound */
+  le: number;
+  
+  /** Count */
   count: number;
 }
 
@@ -36,286 +53,202 @@ export interface HistogramBucket {
  * Histogram data
  */
 export interface HistogramData {
+  /** Sum of all values */
   sum: number;
+  
+  /** Count of all values */
   count: number;
+  
+  /** Buckets */
   buckets: HistogramBucket[];
 }
 
 /**
- * Metrics exporter interface
+ * Metrics collector options
  */
-export interface MetricsExporter {
-  export(metrics: Metric[]): Promise<void>;
-  shutdown(): Promise<void>;
-}
-
-/**
- * Console metrics exporter
- */
-export class ConsoleMetricsExporter implements MetricsExporter {
-  async export(metrics: Metric[]): Promise<void> {
-    for (const metric of metrics) {
-      console.log('[METRIC]', {
-        name: metric.name,
-        type: metric.type,
-        value: metric.value,
-        labels: metric.labels,
-        timestamp: metric.timestamp.toISOString()
-      });
-    }
-  }
-
-  async shutdown(): Promise<void> {
-    // No-op
-  }
-}
-
-/**
- * Metrics collector configuration
- */
-export interface MetricsConfig {
+export interface MetricsCollectorOptions {
+  /** Enable metrics collection */
   enabled?: boolean;
+  
+  /** Metrics prefix */
   prefix?: string;
-  exportInterval?: number;
-  exporter?: MetricsExporter;
-  defaultLabels?: Record<string, string>;
+  
+  /** Default labels */
+  defaultLabels?: MetricLabels;
+  
+  /** Histogram buckets */
+  histogramBuckets?: number[];
+  
+  /** Custom metrics handler */
+  handler?: (metric: MetricValue) => void;
 }
 
 /**
- * Metrics collector class
+ * Metrics Collector Class
+ * 
+ * Responsibilities:
+ * - Track counters, gauges, and histograms
+ * - Support metric labels for dimensions
+ * - Export metrics to monitoring systems
+ * - Minimize performance overhead
  */
 export class MetricsCollector {
-  private config: MetricsConfig;
-  private counters: Map<string, number>;
-  private gauges: Map<string, number>;
-  private histograms: Map<string, HistogramData>;
-  private exporter: MetricsExporter;
-  private exportTimer: NodeJS.Timeout | null;
+  private options: Required<MetricsCollectorOptions>;
+  private counters: Map<string, number> = new Map();
+  private gauges: Map<string, number> = new Map();
+  private histograms: Map<string, HistogramData> = new Map();
 
-  constructor(config: MetricsConfig = {}) {
-    this.config = {
-      enabled: true,
-      prefix: 'sdk',
-      exportInterval: 60000, // 1 minute
-      defaultLabels: {},
-      ...config
+  constructor(options: MetricsCollectorOptions = {}) {
+    this.options = {
+      enabled: options.enabled !== false,
+      prefix: options.prefix || 'namespace_sdk',
+      defaultLabels: options.defaultLabels || {},
+      histogramBuckets: options.histogramBuckets || [
+        0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10
+      ],
+      handler: options.handler || this.defaultHandler.bind(this)
     };
-
-    this.counters = new Map();
-    this.gauges = new Map();
-    this.histograms = new Map();
-    this.exporter = config.exporter || new ConsoleMetricsExporter();
-    this.exportTimer = null;
-  }
-
-  async initialize(): Promise<void> {
-    if (this.config.enabled && this.config.exportInterval) {
-      this.exportTimer = setInterval(
-        () => this.export(),
-        this.config.exportInterval
-      );
-    }
   }
 
   /**
    * Increment a counter
    */
-  increment(name: string, labels?: Record<string, string>, value: number = 1): void {
-    if (!this.config.enabled) return;
+  increment(name: string, labels?: MetricLabels, value: number = 1): void {
+    if (!this.options.enabled) {
+      return;
+    }
 
     const key = this.getMetricKey(name, labels);
     const current = this.counters.get(key) || 0;
     this.counters.set(key, current + value);
+
+    this.emitMetric({
+      name: this.prefixName(name),
+      type: MetricType.COUNTER,
+      value: current + value,
+      labels: this.mergeLabels(labels),
+      timestamp: new Date()
+    });
+  }
+
+  /**
+   * Decrement a counter
+   */
+  decrement(name: string, labels?: MetricLabels, value: number = 1): void {
+    this.increment(name, labels, -value);
   }
 
   /**
    * Set a gauge value
    */
-  gauge(name: string, value: number, labels?: Record<string, string>): void {
-    if (!this.config.enabled) return;
+  setGauge(name: string, value: number, labels?: MetricLabels): void {
+    if (!this.options.enabled) {
+      return;
+    }
 
     const key = this.getMetricKey(name, labels);
     this.gauges.set(key, value);
+
+    this.emitMetric({
+      name: this.prefixName(name),
+      type: MetricType.GAUGE,
+      value,
+      labels: this.mergeLabels(labels),
+      timestamp: new Date()
+    });
+  }
+
+  /**
+   * Increment a gauge
+   */
+  incrementGauge(name: string, labels?: MetricLabels, value: number = 1): void {
+    const key = this.getMetricKey(name, labels);
+    const current = this.gauges.get(key) || 0;
+    this.setGauge(name, current + value, labels);
+  }
+
+  /**
+   * Decrement a gauge
+   */
+  decrementGauge(name: string, labels?: MetricLabels, value: number = 1): void {
+    this.incrementGauge(name, labels, -value);
   }
 
   /**
    * Record a histogram value
    */
-  histogram(name: string, value: number, labels?: Record<string, string>): void {
-    if (!this.config.enabled) return;
-
-    const key = this.getMetricKey(name, labels);
-    let data = this.histograms.get(key);
-
-    if (!data) {
-      data = {
-        sum: 0,
-        count: 0,
-        buckets: this.createBuckets()
-      };
-      this.histograms.set(key, data);
+  recordHistogram(name: string, value: number, labels?: MetricLabels): void {
+    if (!this.options.enabled) {
+      return;
     }
 
-    data.sum += value;
-    data.count++;
+    const key = this.getMetricKey(name, labels);
+    let histogram = this.histograms.get(key);
+
+    if (!histogram) {
+      histogram = {
+        sum: 0,
+        count: 0,
+        buckets: this.options.histogramBuckets.map(le => ({ le, count: 0 }))
+      };
+      this.histograms.set(key, histogram);
+    }
+
+    histogram.sum += value;
+    histogram.count++;
 
     // Update buckets
-    for (const bucket of data.buckets) {
+    for (const bucket of histogram.buckets) {
       if (value <= bucket.le) {
         bucket.count++;
       }
     }
+
+    this.emitMetric({
+      name: this.prefixName(name),
+      type: MetricType.HISTOGRAM,
+      value,
+      labels: this.mergeLabels(labels),
+      timestamp: new Date()
+    });
   }
 
   /**
-   * Create histogram buckets
+   * Get counter value
    */
-  private createBuckets(): HistogramBucket[] {
-    const boundaries = [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10];
-    return boundaries.map(le => ({ le, count: 0 }));
+  getCounter(name: string, labels?: MetricLabels): number {
+    const key = this.getMetricKey(name, labels);
+    return this.counters.get(key) || 0;
   }
 
   /**
-   * Get metric key
+   * Get gauge value
    */
-  private getMetricKey(name: string, labels?: Record<string, string>): string {
-    const fullName = this.config.prefix ? `${this.config.prefix}_${name}` : name;
-    
-    if (!labels || Object.keys(labels).length === 0) {
-      return fullName;
-    }
-
-    const labelStr = Object.entries(labels)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([k, v]) => `${k}="${v}"`)
-      .join(',');
-
-    return `${fullName}{${labelStr}}`;
+  getGauge(name: string, labels?: MetricLabels): number {
+    const key = this.getMetricKey(name, labels);
+    return this.gauges.get(key) || 0;
   }
 
   /**
-   * Parse metric key
+   * Get histogram data
    */
-  private parseMetricKey(key: string): { name: string; labels?: Record<string, string> } {
-    const match = key.match(/^([^{]+)(?:\{(.+)\})?$/);
-    
-    if (!match) {
-      return { name: key };
-    }
-
-    const name = match[1];
-    const labelsStr = match[2];
-
-    if (!labelsStr) {
-      return { name };
-    }
-
-    const labels: Record<string, string> = {};
-    const pairs = labelsStr.split(',');
-
-    for (const pair of pairs) {
-      const [k, v] = pair.split('=');
-      labels[k] = v.replace(/"/g, '');
-    }
-
-    return { name, labels };
+  getHistogram(name: string, labels?: MetricLabels): HistogramData | undefined {
+    const key = this.getMetricKey(name, labels);
+    return this.histograms.get(key);
   }
 
   /**
-   * Export metrics
+   * Get all metrics
    */
-  async export(): Promise<void> {
-    const metrics: Metric[] = [];
-    const timestamp = new Date();
-
-    // Export counters
-    for (const [key, value] of this.counters.entries()) {
-      const { name, labels } = this.parseMetricKey(key);
-      metrics.push({
-        name,
-        type: MetricType.COUNTER,
-        value,
-        timestamp,
-        labels: { ...this.config.defaultLabels, ...labels }
-      });
-    }
-
-    // Export gauges
-    for (const [key, value] of this.gauges.entries()) {
-      const { name, labels } = this.parseMetricKey(key);
-      metrics.push({
-        name,
-        type: MetricType.GAUGE,
-        value,
-        timestamp,
-        labels: { ...this.config.defaultLabels, ...labels }
-      });
-    }
-
-    // Export histograms
-    for (const [key, data] of this.histograms.entries()) {
-      const { name, labels } = this.parseMetricKey(key);
-      
-      // Export sum
-      metrics.push({
-        name: `${name}_sum`,
-        type: MetricType.COUNTER,
-        value: data.sum,
-        timestamp,
-        labels: { ...this.config.defaultLabels, ...labels }
-      });
-
-      // Export count
-      metrics.push({
-        name: `${name}_count`,
-        type: MetricType.COUNTER,
-        value: data.count,
-        timestamp,
-        labels: { ...this.config.defaultLabels, ...labels }
-      });
-
-      // Export buckets
-      for (const bucket of data.buckets) {
-        metrics.push({
-          name: `${name}_bucket`,
-          type: MetricType.COUNTER,
-          value: bucket.count,
-          timestamp,
-          labels: {
-            ...this.config.defaultLabels,
-            ...labels,
-            le: bucket.le.toString()
-          }
-        });
-      }
-    }
-
-    if (metrics.length > 0) {
-      try {
-        await this.exporter.export(metrics);
-      } catch (error) {
-        console.error('Failed to export metrics:', error);
-      }
-    }
-  }
-
-  /**
-   * Get current metrics snapshot
-   */
-  getSnapshot(): any {
+  getAllMetrics(): {
+    counters: Map<string, number>;
+    gauges: Map<string, number>;
+    histograms: Map<string, HistogramData>;
+  } {
     return {
-      counters: Object.fromEntries(this.counters),
-      gauges: Object.fromEntries(this.gauges),
-      histograms: Object.fromEntries(
-        Array.from(this.histograms.entries()).map(([key, data]) => [
-          key,
-          {
-            sum: data.sum,
-            count: data.count,
-            avg: data.count > 0 ? data.sum / data.count : 0
-          }
-        ])
-      )
+      counters: new Map(this.counters),
+      gauges: new Map(this.gauges),
+      histograms: new Map(this.histograms)
     };
   }
 
@@ -329,15 +262,159 @@ export class MetricsCollector {
   }
 
   /**
-   * Shutdown metrics collector
+   * Flush metrics
    */
-  async shutdown(): Promise<void> {
-    if (this.exportTimer) {
-      clearInterval(this.exportTimer);
-      this.exportTimer = null;
+  async flush(): Promise<void> {
+    // Flush any buffered metrics
+    // In production, this would export to a metrics backend
+  }
+
+  /**
+   * Enable or disable metrics collection
+   */
+  setEnabled(enabled: boolean): void {
+    this.options.enabled = enabled;
+  }
+
+  /**
+   * Check if metrics collection is enabled
+   */
+  isEnabled(): boolean {
+    return this.options.enabled;
+  }
+
+  /**
+   * Export metrics in Prometheus format
+   */
+  exportPrometheus(): string {
+    const lines: string[] = [];
+
+    // Export counters
+    for (const [key, value] of this.counters.entries()) {
+      const { name, labels } = this.parseMetricKey(key);
+      const labelsStr = this.formatLabels(labels);
+      lines.push(`${name}${labelsStr} ${value}`);
     }
 
-    await this.export();
-    await this.exporter.shutdown();
+    // Export gauges
+    for (const [key, value] of this.gauges.entries()) {
+      const { name, labels } = this.parseMetricKey(key);
+      const labelsStr = this.formatLabels(labels);
+      lines.push(`${name}${labelsStr} ${value}`);
+    }
+
+    // Export histograms
+    for (const [key, histogram] of this.histograms.entries()) {
+      const { name, labels } = this.parseMetricKey(key);
+      const labelsStr = this.formatLabels(labels);
+
+      // Buckets
+      for (const bucket of histogram.buckets) {
+        const bucketLabels = { ...labels, le: bucket.le.toString() };
+        const bucketLabelsStr = this.formatLabels(bucketLabels);
+        lines.push(`${name}_bucket${bucketLabelsStr} ${bucket.count}`);
+      }
+
+      // Sum and count
+      lines.push(`${name}_sum${labelsStr} ${histogram.sum}`);
+      lines.push(`${name}_count${labelsStr} ${histogram.count}`);
+    }
+
+    return lines.join('\n');
   }
+
+  /**
+   * Get metric key
+   */
+  private getMetricKey(name: string, labels?: MetricLabels): string {
+    const mergedLabels = this.mergeLabels(labels);
+    const labelsStr = Object.entries(mergedLabels)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([k, v]) => `${k}=${v}`)
+      .join(',');
+    
+    return labelsStr ? `${name}{${labelsStr}}` : name;
+  }
+
+  /**
+   * Parse metric key
+   */
+  private parseMetricKey(key: string): { name: string; labels: MetricLabels } {
+    const match = key.match(/^([^{]+)(?:\{([^}]+)\})?$/);
+    
+    if (!match) {
+      return { name: key, labels: {} };
+    }
+
+    const name = match[1];
+    const labelsStr = match[2];
+    const labels: MetricLabels = {};
+
+    if (labelsStr) {
+      for (const pair of labelsStr.split(',')) {
+        const [k, v] = pair.split('=');
+        labels[k] = v;
+      }
+    }
+
+    return { name, labels };
+  }
+
+  /**
+   * Prefix metric name
+   */
+  private prefixName(name: string): string {
+    return this.options.prefix ? `${this.options.prefix}_${name}` : name;
+  }
+
+  /**
+   * Merge labels with default labels
+   */
+  private mergeLabels(labels?: MetricLabels): MetricLabels {
+    return {
+      ...this.options.defaultLabels,
+      ...labels
+    };
+  }
+
+  /**
+   * Format labels for Prometheus
+   */
+  private formatLabels(labels: MetricLabels): string {
+    const entries = Object.entries(labels);
+    
+    if (entries.length === 0) {
+      return '';
+    }
+
+    const labelsStr = entries
+      .map(([k, v]) => `${k}="${v}"`)
+      .join(',');
+    
+    return `{${labelsStr}}`;
+  }
+
+  /**
+   * Emit a metric
+   */
+  private emitMetric(metric: MetricValue): void {
+    this.options.handler(metric);
+  }
+
+  /**
+   * Default metrics handler
+   */
+  private defaultHandler(metric: MetricValue): void {
+    // Default handler does nothing
+    // In production, this would export to a metrics backend
+  }
+}
+
+/**
+ * Create a metrics collector instance
+ */
+export function createMetricsCollector(
+  options?: MetricsCollectorOptions
+): MetricsCollector {
+  return new MetricsCollector(options);
 }

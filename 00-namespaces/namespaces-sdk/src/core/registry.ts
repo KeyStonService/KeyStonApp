@@ -1,352 +1,380 @@
 /**
- * Tool and Plugin Registry
+ * Tool Registry - Dynamic tool discovery and registration
  * 
  * Maintains a registry of all available tools, adapters, and plugins,
- * supporting dynamic discovery and registration.
+ * supporting dynamic discovery, registration, and querying.
  */
 
-import { Tool, ToolMetadata, ToolDescriptor, ToolFactory } from './tool';
-import { ToolNotFoundError, RegistryError } from './errors';
+import { Tool, ToolMetadata } from './tool';
+import { SDKError, ErrorCode } from './errors';
 import { Logger } from '../observability/logger';
 
 /**
- * Registry error class
+ * Tool registration options
  */
-class RegistryError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'RegistryError';
-  }
-}
-
-/**
- * Tool filter options
- */
-export interface ToolFilter {
-  adapter?: string;
+export interface ToolRegistrationOptions {
+  /** Override existing tool with same name */
+  override?: boolean;
+  /** Tool category/namespace */
+  category?: string;
+  /** Tool tags for filtering */
   tags?: string[];
-  capabilities?: string[];
-  deprecated?: boolean;
-  namePattern?: RegExp;
 }
 
 /**
- * Registry statistics
+ * Tool query filters
  */
-export interface RegistryStats {
-  totalTools: number;
-  toolsByAdapter: Record<string, number>;
-  deprecatedTools: number;
-  registeredAdapters: string[];
+export interface ToolQueryFilter {
+  /** Filter by category */
+  category?: string;
+  /** Filter by tags (any match) */
+  tags?: string[];
+  /** Filter by capability */
+  capability?: string;
+  /** Filter by adapter name */
+  adapter?: string;
+  /** Filter by version */
+  version?: string;
 }
 
 /**
- * Tool Registry class
+ * Registered tool entry
+ */
+interface ToolEntry {
+  tool: Tool;
+  metadata: ToolMetadata;
+  registeredAt: Date;
+  category?: string;
+  tags: string[];
+}
+
+/**
+ * Tool Registry Class
+ * 
+ * Responsibilities:
+ * - Register and unregister tools at runtime
+ * - Support querying tools by name, capability, or adapter
+ * - Enable hot-pluggable extension via plugin loading
+ * - Maintain thread-safe registry operations
  */
 export class ToolRegistry {
-  private tools: Map<string, ToolDescriptor>;
-  private toolsByAdapter: Map<string, Set<string>>;
+  private tools: Map<string, ToolEntry> = new Map();
   private logger: Logger;
-  private locked: boolean;
+  private registryVersion: number = 0;
 
-  constructor() {
-    this.tools = new Map();
-    this.toolsByAdapter = new Map();
-    this.logger = new Logger('ToolRegistry');
-    this.locked = false;
+  constructor(logger: Logger) {
+    this.logger = logger;
   }
 
   /**
-   * Register a tool
+   * Register a tool in the registry
+   * @param tool Tool instance to register
+   * @param options Registration options
    */
-  register(descriptor: ToolDescriptor): void {
-    if (this.locked) {
-      throw new RegistryError('Registry is locked and cannot accept new registrations');
+  register(tool: Tool, options: ToolRegistrationOptions = {}): void {
+    const metadata = tool.getMetadata();
+    const toolName = metadata.name;
+
+    // Check if tool already exists
+    if (this.tools.has(toolName) && !options.override) {
+      throw new SDKError(
+        ErrorCode.TOOL_ALREADY_REGISTERED,
+        `Tool already registered: ${toolName}. Use override option to replace.`
+      );
     }
 
-    const { metadata } = descriptor;
-    
-    // Validate metadata
-    if (!metadata.name || !metadata.adapter) {
-      throw new RegistryError('Tool metadata must include name and adapter');
-    }
+    // Validate tool metadata
+    this.validateToolMetadata(metadata);
 
-    // Check for duplicate
-    if (this.tools.has(metadata.name)) {
-      this.logger.warn(`Tool '${metadata.name}' is already registered. Overwriting.`);
-    }
+    // Create tool entry
+    const entry: ToolEntry = {
+      tool,
+      metadata,
+      registeredAt: new Date(),
+      category: options.category,
+      tags: options.tags || []
+    };
 
-    // Register tool
-    this.tools.set(metadata.name, descriptor);
+    // Register the tool
+    this.tools.set(toolName, entry);
+    this.registryVersion++;
 
-    // Update adapter index
-    if (!this.toolsByAdapter.has(metadata.adapter)) {
-      this.toolsByAdapter.set(metadata.adapter, new Set());
-    }
-    this.toolsByAdapter.get(metadata.adapter)!.add(metadata.name);
-
-    this.logger.info(`Registered tool: ${metadata.name} (adapter: ${metadata.adapter})`);
+    this.logger.info(`Tool registered: ${toolName}`, {
+      version: metadata.version,
+      category: options.category,
+      tags: options.tags
+    });
   }
 
   /**
-   * Unregister a tool
+   * Unregister a tool from the registry
+   * @param toolName Name of the tool to unregister
+   * @returns true if tool was unregistered, false if not found
    */
   unregister(toolName: string): boolean {
-    if (this.locked) {
-      throw new RegistryError('Registry is locked and cannot unregister tools');
-    }
-
-    const descriptor = this.tools.get(toolName);
-    if (!descriptor) {
-      return false;
-    }
-
-    // Remove from adapter index
-    const adapterTools = this.toolsByAdapter.get(descriptor.metadata.adapter);
-    if (adapterTools) {
-      adapterTools.delete(toolName);
-      if (adapterTools.size === 0) {
-        this.toolsByAdapter.delete(descriptor.metadata.adapter);
-      }
-    }
-
-    // Remove tool
-    this.tools.delete(toolName);
-    this.logger.info(`Unregistered tool: ${toolName}`);
+    const existed = this.tools.delete(toolName);
     
-    return true;
+    if (existed) {
+      this.registryVersion++;
+      this.logger.info(`Tool unregistered: ${toolName}`);
+    }
+
+    return existed;
   }
 
   /**
-   * Get a tool descriptor
+   * Get a tool instance by name
+   * @param toolName Name of the tool
+   * @returns Tool instance or undefined if not found
    */
-  get(toolName: string): ToolDescriptor | undefined {
-    return this.tools.get(toolName);
+  getToolInstance(toolName: string): Tool | undefined {
+    const entry = this.tools.get(toolName);
+    return entry?.tool;
   }
 
   /**
-   * Check if a tool exists
+   * Get tool metadata by name
+   * @param toolName Name of the tool
+   * @returns Tool metadata or undefined if not found
    */
-  has(toolName: string): boolean {
+  getTool(toolName: string): ToolMetadata | undefined {
+    const entry = this.tools.get(toolName);
+    return entry?.metadata;
+  }
+
+  /**
+   * Check if a tool is registered
+   * @param toolName Name of the tool
+   * @returns true if tool is registered
+   */
+  hasTool(toolName: string): boolean {
     return this.tools.has(toolName);
   }
 
   /**
-   * List all tool names
+   * List all registered tools
+   * @param filter Optional filter criteria
+   * @returns Array of tool metadata
    */
-  list(): string[] {
-    return Array.from(this.tools.keys());
-  }
+  listTools(filter?: ToolQueryFilter): ToolMetadata[] {
+    let entries = Array.from(this.tools.values());
 
-  /**
-   * List all tool metadata
-   */
-  listMetadata(): ToolMetadata[] {
-    return Array.from(this.tools.values()).map(d => d.metadata);
-  }
-
-  /**
-   * Filter tools by criteria
-   */
-  filter(filter: ToolFilter): ToolMetadata[] {
-    let results = Array.from(this.tools.values());
-
-    // Filter by adapter
-    if (filter.adapter) {
-      results = results.filter(d => d.metadata.adapter === filter.adapter);
+    // Apply filters
+    if (filter) {
+      entries = this.applyFilters(entries, filter);
     }
 
-    // Filter by tags
-    if (filter.tags && filter.tags.length > 0) {
-      results = results.filter(d => 
-        filter.tags!.some(tag => d.metadata.tags?.includes(tag))
-      );
-    }
-
-    // Filter by capabilities
-    if (filter.capabilities && filter.capabilities.length > 0) {
-      results = results.filter(d =>
-        filter.capabilities!.every(cap => d.metadata.capabilities?.includes(cap))
-      );
-    }
-
-    // Filter by deprecated status
-    if (filter.deprecated !== undefined) {
-      results = results.filter(d => d.metadata.deprecated === filter.deprecated);
-    }
-
-    // Filter by name pattern
-    if (filter.namePattern) {
-      results = results.filter(d => filter.namePattern!.test(d.metadata.name));
-    }
-
-    return results.map(d => d.metadata);
-  }
-
-  /**
-   * Get tools by adapter
-   */
-  getByAdapter(adapter: string): ToolMetadata[] {
-    const toolNames = this.toolsByAdapter.get(adapter);
-    if (!toolNames) {
-      return [];
-    }
-
-    return Array.from(toolNames)
-      .map(name => this.tools.get(name))
-      .filter((d): d is ToolDescriptor => d !== undefined)
-      .map(d => d.metadata);
-  }
-
-  /**
-   * Get all registered adapters
-   */
-  getAdapters(): string[] {
-    return Array.from(this.toolsByAdapter.keys());
-  }
-
-  /**
-   * Get registry statistics
-   */
-  getStats(): RegistryStats {
-    const toolsByAdapter: Record<string, number> = {};
-    
-    for (const [adapter, tools] of this.toolsByAdapter.entries()) {
-      toolsByAdapter[adapter] = tools.size;
-    }
-
-    const deprecatedTools = Array.from(this.tools.values())
-      .filter(d => d.metadata.deprecated)
-      .length;
-
-    return {
-      totalTools: this.tools.size,
-      toolsByAdapter,
-      deprecatedTools,
-      registeredAdapters: this.getAdapters()
-    };
-  }
-
-  /**
-   * Create a tool instance
-   */
-  createTool(toolName: string, config?: any): Tool {
-    const descriptor = this.tools.get(toolName);
-    
-    if (!descriptor) {
-      throw new ToolNotFoundError(toolName);
-    }
-
-    return descriptor.factory.createTool(config);
-  }
-
-  /**
-   * Lock the registry (prevent further registrations)
-   */
-  lock(): void {
-    this.locked = true;
-    this.logger.info('Registry locked');
-  }
-
-  /**
-   * Unlock the registry
-   */
-  unlock(): void {
-    this.locked = false;
-    this.logger.info('Registry unlocked');
-  }
-
-  /**
-   * Check if registry is locked
-   */
-  isLocked(): boolean {
-    return this.locked;
-  }
-
-  /**
-   * Clear all registrations
-   */
-  clear(): void {
-    if (this.locked) {
-      throw new RegistryError('Registry is locked and cannot be cleared');
-    }
-
-    this.tools.clear();
-    this.toolsByAdapter.clear();
-    this.logger.info('Registry cleared');
-  }
-
-  /**
-   * Validate registry integrity
-   */
-  validate(): { valid: boolean; errors: string[] } {
-    const errors: string[] = [];
-
-    // Check for orphaned adapter references
-    for (const [adapter, toolNames] of this.toolsByAdapter.entries()) {
-      for (const toolName of toolNames) {
-        if (!this.tools.has(toolName)) {
-          errors.push(`Orphaned tool reference in adapter '${adapter}': ${toolName}`);
-        }
-      }
-    }
-
-    // Check for tools without adapter references
-    for (const [toolName, descriptor] of this.tools.entries()) {
-      const adapterTools = this.toolsByAdapter.get(descriptor.metadata.adapter);
-      if (!adapterTools || !adapterTools.has(toolName)) {
-        errors.push(`Tool '${toolName}' not indexed in adapter '${descriptor.metadata.adapter}'`);
-      }
-    }
-
-    return {
-      valid: errors.length === 0,
-      errors
-    };
-  }
-
-  /**
-   * Export registry to JSON
-   */
-  toJSON(): any {
-    return {
-      tools: Array.from(this.tools.entries()).map(([name, descriptor]) => ({
-        name,
-        metadata: descriptor.metadata,
-        inputSchema: descriptor.inputSchema,
-        outputSchema: descriptor.outputSchema
-      })),
-      stats: this.getStats(),
-      locked: this.locked
-    };
+    return entries.map(entry => entry.metadata);
   }
 
   /**
    * Get tool count
+   * @returns Number of registered tools
    */
-  size(): number {
+  getToolCount(): number {
     return this.tools.size;
   }
-}
 
-/**
- * Global registry instance
- */
-let globalRegistry: ToolRegistry | null = null;
-
-/**
- * Get or create global registry
- */
-export function getGlobalRegistry(): ToolRegistry {
-  if (!globalRegistry) {
-    globalRegistry = new ToolRegistry();
+  /**
+   * Get tools by category
+   * @param category Category name
+   * @returns Array of tool metadata
+   */
+  getToolsByCategory(category: string): ToolMetadata[] {
+    return this.listTools({ category });
   }
-  return globalRegistry;
-}
 
-/**
- * Reset global registry (mainly for testing)
- */
-export function resetGlobalRegistry(): void {
-  globalRegistry = null;
+  /**
+   * Get tools by tag
+   * @param tag Tag name
+   * @returns Array of tool metadata
+   */
+  getToolsByTag(tag: string): ToolMetadata[] {
+    return this.listTools({ tags: [tag] });
+  }
+
+  /**
+   * Get tools by adapter
+   * @param adapter Adapter name
+   * @returns Array of tool metadata
+   */
+  getToolsByAdapter(adapter: string): ToolMetadata[] {
+    return this.listTools({ adapter });
+  }
+
+  /**
+   * Search tools by keyword
+   * @param keyword Search keyword
+   * @returns Array of tool metadata
+   */
+  searchTools(keyword: string): ToolMetadata[] {
+    const lowerKeyword = keyword.toLowerCase();
+    
+    return Array.from(this.tools.values())
+      .filter(entry => {
+        const metadata = entry.metadata;
+        return (
+          metadata.name.toLowerCase().includes(lowerKeyword) ||
+          metadata.description.toLowerCase().includes(lowerKeyword) ||
+          entry.tags.some(tag => tag.toLowerCase().includes(lowerKeyword))
+        );
+      })
+      .map(entry => entry.metadata);
+  }
+
+  /**
+   * Get registry version
+   * Increments on any registration/unregistration
+   * @returns Current registry version
+   */
+  getVersion(): number {
+    return this.registryVersion;
+  }
+
+  /**
+   * Clear all registered tools
+   */
+  clear(): void {
+    const count = this.tools.size;
+    this.tools.clear();
+    this.registryVersion++;
+    
+    this.logger.info(`Registry cleared: ${count} tools removed`);
+  }
+
+  /**
+   * Get registry statistics
+   * @returns Registry statistics
+   */
+  getStats(): {
+    totalTools: number;
+    categories: Record<string, number>;
+    adapters: Record<string, number>;
+    version: number;
+  } {
+    const categories: Record<string, number> = {};
+    const adapters: Record<string, number> = {};
+
+    for (const entry of this.tools.values()) {
+      // Count by category
+      if (entry.category) {
+        categories[entry.category] = (categories[entry.category] || 0) + 1;
+      }
+
+      // Count by adapter
+      const adapter = entry.metadata.adapter;
+      if (adapter) {
+        adapters[adapter] = (adapters[adapter] || 0) + 1;
+      }
+    }
+
+    return {
+      totalTools: this.tools.size,
+      categories,
+      adapters,
+      version: this.registryVersion
+    };
+  }
+
+  /**
+   * Export registry as JSON
+   * @returns JSON representation of registry
+   */
+  toJSON(): any {
+    return {
+      version: this.registryVersion,
+      toolCount: this.tools.size,
+      tools: Array.from(this.tools.values()).map(entry => ({
+        name: entry.metadata.name,
+        version: entry.metadata.version,
+        description: entry.metadata.description,
+        adapter: entry.metadata.adapter,
+        category: entry.category,
+        tags: entry.tags,
+        registeredAt: entry.registeredAt.toISOString()
+      }))
+    };
+  }
+
+  /**
+   * Validate tool metadata
+   */
+  private validateToolMetadata(metadata: ToolMetadata): void {
+    if (!metadata.name || typeof metadata.name !== 'string') {
+      throw new SDKError(
+        ErrorCode.INVALID_TOOL_METADATA,
+        'Tool name is required and must be a string'
+      );
+    }
+
+    if (!metadata.description || typeof metadata.description !== 'string') {
+      throw new SDKError(
+        ErrorCode.INVALID_TOOL_METADATA,
+        'Tool description is required and must be a string'
+      );
+    }
+
+    if (!metadata.version || typeof metadata.version !== 'string') {
+      throw new SDKError(
+        ErrorCode.INVALID_TOOL_METADATA,
+        'Tool version is required and must be a string'
+      );
+    }
+
+    // Validate version format (semantic versioning)
+    const versionRegex = /^\d+\.\d+\.\d+(-[a-zA-Z0-9.-]+)?$/;
+    if (!versionRegex.test(metadata.version)) {
+      throw new SDKError(
+        ErrorCode.INVALID_TOOL_METADATA,
+        `Invalid version format: ${metadata.version}. Expected semantic versioning (e.g., 1.0.0)`
+      );
+    }
+  }
+
+  /**
+   * Apply filters to tool entries
+   */
+  private applyFilters(
+    entries: ToolEntry[],
+    filter: ToolQueryFilter
+  ): ToolEntry[] {
+    return entries.filter(entry => {
+      // Filter by category
+      if (filter.category && entry.category !== filter.category) {
+        return false;
+      }
+
+      // Filter by tags (any match)
+      if (filter.tags && filter.tags.length > 0) {
+        const hasMatchingTag = filter.tags.some(tag =>
+          entry.tags.includes(tag)
+        );
+        if (!hasMatchingTag) {
+          return false;
+        }
+      }
+
+      // Filter by adapter
+      if (filter.adapter && entry.metadata.adapter !== filter.adapter) {
+        return false;
+      }
+
+      // Filter by version
+      if (filter.version && entry.metadata.version !== filter.version) {
+        return false;
+      }
+
+      // Filter by capability
+      if (filter.capability) {
+        const hasCapability = entry.metadata.capabilities?.includes(
+          filter.capability
+        );
+        if (!hasCapability) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }
 }

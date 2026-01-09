@@ -5,67 +5,159 @@
  */
 
 /**
- * Credential type enumeration
- */
-export enum CredentialType {
-  API_KEY = 'api_key',
-  OAUTH_TOKEN = 'oauth_token',
-  BEARER_TOKEN = 'bearer_token',
-  BASIC_AUTH = 'basic_auth',
-  SSH_KEY = 'ssh_key',
-  CERTIFICATE = 'certificate',
-  SERVICE_ACCOUNT = 'service_account',
-  CUSTOM = 'custom'
-}
-
-/**
- * Base credential interface
+ * Credential interface
  */
 export interface Credential {
-  /** Unique credential identifier */
-  id: string;
+  /** Credential key/identifier */
+  key: string;
+  
+  /** Credential value (token, API key, password, etc.) */
+  value: string;
+  
+  /** Credential scope (e.g., 'repo', 'user', 'admin') */
+  scope?: string;
+  
   /** Credential type */
-  type: CredentialType;
-  /** Service/adapter name */
-  service: string;
-  /** Credential scope */
-  scope?: string[];
-  /** Expiration timestamp */
+  type?: CredentialType;
+  
+  /** Expiration date */
   expiresAt?: Date;
-  /** Creation timestamp */
-  createdAt: Date;
-  /** Last used timestamp */
-  lastUsedAt?: Date;
-  /** Metadata */
+  
+  /** Additional metadata */
   metadata?: Record<string, any>;
 }
 
 /**
- * API Key credential
+ * Credential type enumeration
  */
-export interface APIKeyCredential extends Credential {
-  type: CredentialType.API_KEY;
-  apiKey: string;
+export enum CredentialType {
+  /** API key */
+  API_KEY = 'api_key',
+  
+  /** OAuth token */
+  OAUTH_TOKEN = 'oauth_token',
+  
+  /** Bearer token */
+  BEARER_TOKEN = 'bearer_token',
+  
+  /** Basic auth (username:password) */
+  BASIC_AUTH = 'basic_auth',
+  
+  /** SSH key */
+  SSH_KEY = 'ssh_key',
+  
+  /** Certificate */
+  CERTIFICATE = 'certificate',
+  
+  /** Service account key */
+  SERVICE_ACCOUNT = 'service_account',
+  
+  /** Custom credential type */
+  CUSTOM = 'custom'
+}
+
+/**
+ * Credential configuration
+ */
+export interface CredentialConfig {
+  /** Provider name */
+  provider: string;
+  
+  /** Provider-specific configuration */
+  config?: Record<string, any>;
+  
+  /** Credential mappings */
+  mappings?: Record<string, string>;
+}
+
+/**
+ * Credential provider interface
+ */
+export interface CredentialProvider {
+  /** Provider name */
+  name: string;
+  
+  /**
+   * Initialize the provider
+   */
+  initialize?(): Promise<void>;
+  
+  /**
+   * Get a credential by key
+   * @param key Credential key
+   * @param scope Optional credential scope
+   * @returns Credential or undefined if not found
+   */
+  getCredential(key: string, scope?: string): Promise<Credential | undefined>;
+  
+  /**
+   * Set a credential
+   * @param credential Credential to set
+   */
+  setCredential(credential: Credential): Promise<void>;
+  
+  /**
+   * Delete a credential
+   * @param key Credential key
+   * @param scope Optional credential scope
+   */
+  deleteCredential(key: string, scope?: string): Promise<void>;
+  
+  /**
+   * List all credential keys
+   * @returns Array of credential keys
+   */
+  listCredentials?(): Promise<string[]>;
+  
+  /**
+   * Check if provider supports a specific operation
+   * @param operation Operation name
+   * @returns true if supported
+   */
+  supports?(operation: string): boolean;
+  
+  /**
+   * Cleanup provider resources
+   */
+  cleanup?(): Promise<void>;
 }
 
 /**
  * OAuth token credential
  */
-export interface OAuthTokenCredential extends Credential {
+export interface OAuthCredential extends Credential {
   type: CredentialType.OAUTH_TOKEN;
+  
+  /** Access token */
   accessToken: string;
+  
+  /** Refresh token */
   refreshToken?: string;
-  tokenType: string;
-  scope?: string[];
+  
+  /** Token type (e.g., 'Bearer') */
+  tokenType?: string;
+  
+  /** Token scopes */
+  scopes?: string[];
+  
+  /** Token expiration timestamp */
   expiresAt?: Date;
 }
 
 /**
- * Bearer token credential
+ * API key credential
  */
-export interface BearerTokenCredential extends Credential {
-  type: CredentialType.BEARER_TOKEN;
-  token: string;
+export interface ApiKeyCredential extends Credential {
+  type: CredentialType.API_KEY;
+  
+  /** API key value */
+  apiKey: string;
+  
+  /** API key name/identifier */
+  keyName?: string;
+  
+  /** Associated user/account */
+  userId?: string;
 }
 
 /**
@@ -73,17 +165,27 @@ export interface BearerTokenCredential extends Credential {
  */
 export interface BasicAuthCredential extends Credential {
   type: CredentialType.BASIC_AUTH;
+  
+  /** Username */
   username: string;
+  
+  /** Password */
   password: string;
 }
 
 /**
  * SSH key credential
  */
-export interface SSHKeyCredential extends Credential {
+export interface SshKeyCredential extends Credential {
   type: CredentialType.SSH_KEY;
+  
+  /** Private key */
   privateKey: string;
+  
+  /** Public key */
   publicKey?: string;
+  
+  /** Passphrase */
   passphrase?: string;
 }
 
@@ -92,10 +194,18 @@ export interface SSHKeyCredential extends Credential {
  */
 export interface CertificateCredential extends Credential {
   type: CredentialType.CERTIFICATE;
+  
+  /** Certificate content */
   certificate: string;
-  privateKey: string;
-  passphrase?: string;
+  
+  /** Private key */
+  privateKey?: string;
+  
+  /** Certificate chain */
   chain?: string[];
+  
+  /** Certificate format (PEM, DER, etc.) */
+  format?: string;
 }
 
 /**
@@ -103,232 +213,253 @@ export interface CertificateCredential extends Credential {
  */
 export interface ServiceAccountCredential extends Credential {
   type: CredentialType.SERVICE_ACCOUNT;
-  clientId: string;
-  clientSecret: string;
-  tenantId?: string;
-  additionalFields?: Record<string, any>;
+  
+  /** Service account email/identifier */
+  email: string;
+  
+  /** Private key */
+  privateKey: string;
+  
+  /** Project ID */
+  projectId?: string;
+  
+  /** Additional service account data */
+  data?: Record<string, any>;
 }
 
 /**
- * Custom credential
+ * Credential provider configuration
  */
-export interface CustomCredential extends Credential {
-  type: CredentialType.CUSTOM;
-  data: Record<string, any>;
-}
-
-/**
- * Union type for all credentials
- */
-export type AnyCredential =
-  | APIKeyCredential
-  | OAuthTokenCredential
-  | BearerTokenCredential
-  | BasicAuthCredential
-  | SSHKeyCredential
-  | CertificateCredential
-  | ServiceAccountCredential
-  | CustomCredential;
-
-/**
- * Credential provider interface
- */
-export interface CredentialProvider {
+export interface ProviderConfig {
+  /** Provider type */
+  type: 'env' | 'file' | 'vault' | 'cloud' | 'custom';
+  
   /** Provider name */
   name: string;
-  /** Provider priority (higher = checked first) */
-  priority: number;
-  /** Initialize provider */
-  initialize(): Promise<void>;
-  /** Get credential by service and scope */
-  getCredential(service: string, scope?: string[]): Promise<AnyCredential | null>;
-  /** Check if provider has credential */
-  hasCredential(service: string, scope?: string[]): Promise<boolean>;
-  /** Store credential */
-  storeCredential(credential: AnyCredential): Promise<void>;
-  /** Delete credential */
-  deleteCredential(id: string): Promise<boolean>;
-  /** List all credentials */
-  listCredentials(): Promise<Credential[]>;
-  /** Shutdown provider */
-  shutdown(): Promise<void>;
+  
+  /** Provider priority (lower = higher priority) */
+  priority?: number;
+  
+  /** Provider-specific options */
+  options?: Record<string, any>;
+  
+  /** Whether provider is enabled */
+  enabled?: boolean;
 }
 
 /**
- * Credential usage record
+ * Environment variable provider configuration
  */
-export interface CredentialUsage {
-  credentialId: string;
-  service: string;
-  timestamp: Date;
-  operation?: string;
-  success: boolean;
-  metadata?: Record<string, any>;
+export interface EnvProviderConfig extends ProviderConfig {
+  type: 'env';
+  
+  options?: {
+    /** Prefix for environment variables */
+    prefix?: string;
+    
+    /** Variable name mappings */
+    mappings?: Record<string, string>;
+  };
+}
+
+/**
+ * File provider configuration
+ */
+export interface FileProviderConfig extends ProviderConfig {
+  type: 'file';
+  
+  options: {
+    /** Path to credentials file */
+    path: string;
+    
+    /** File format (json, yaml, env) */
+    format?: 'json' | 'yaml' | 'env';
+    
+    /** Whether to watch file for changes */
+    watch?: boolean;
+  };
+}
+
+/**
+ * Vault provider configuration
+ */
+export interface VaultProviderConfig extends ProviderConfig {
+  type: 'vault';
+  
+  options: {
+    /** Vault server URL */
+    url: string;
+    
+    /** Vault token */
+    token: string;
+    
+    /** Vault namespace */
+    namespace?: string;
+    
+    /** Secret path prefix */
+    pathPrefix?: string;
+    
+    /** KV version (1 or 2) */
+    kvVersion?: 1 | 2;
+  };
+}
+
+/**
+ * Cloud provider configuration (AWS, GCP, Azure)
+ */
+export interface CloudProviderConfig extends ProviderConfig {
+  type: 'cloud';
+  
+  options: {
+    /** Cloud provider type */
+    provider: 'aws' | 'gcp' | 'azure';
+    
+    /** Region */
+    region?: string;
+    
+    /** Secret name prefix */
+    prefix?: string;
+    
+    /** Additional provider-specific options */
+    [key: string]: any;
+  };
 }
 
 /**
  * Credential rotation policy
  */
 export interface RotationPolicy {
-  /** Enable automatic rotation */
+  /** Whether rotation is enabled */
   enabled: boolean;
-  /** Rotation interval in days */
-  intervalDays: number;
-  /** Warning threshold in days before expiration */
-  warningThresholdDays: number;
-  /** Rotation callback */
-  onRotate?: (credential: AnyCredential) => Promise<AnyCredential>;
+  
+  /** Rotation interval in milliseconds */
+  interval: number;
+  
+  /** Grace period before old credential expires */
+  gracePeriod?: number;
+  
+  /** Rotation strategy */
+  strategy?: 'immediate' | 'gradual' | 'blue-green';
+  
+  /** Notification settings */
+  notifications?: {
+    /** Notify before rotation */
+    beforeRotation?: boolean;
+    
+    /** Notify after rotation */
+    afterRotation?: boolean;
+    
+    /** Notification channels */
+    channels?: string[];
+  };
+}
+
+/**
+ * Credential usage tracking
+ */
+export interface CredentialUsage {
+  /** Credential key */
+  key: string;
+  
+  /** Number of times accessed */
+  accessCount: number;
+  
+  /** Last access timestamp */
+  lastAccessedAt: Date;
+  
+  /** First access timestamp */
+  firstAccessedAt: Date;
+  
+  /** Access history */
+  history?: Array<{
+    timestamp: Date;
+    operation: string;
+    success: boolean;
+  }>;
 }
 
 /**
  * Credential validation result
  */
-export interface ValidationResult {
+export interface CredentialValidation {
+  /** Whether credential is valid */
   valid: boolean;
+  
+  /** Validation errors if any */
   errors?: string[];
+  
+  /** Validation warnings */
   warnings?: string[];
+  
+  /** Credential strength score (0-100) */
+  strength?: number;
+  
+  /** Expiration status */
+  expirationStatus?: 'valid' | 'expiring-soon' | 'expired';
+  
+  /** Days until expiration */
+  daysUntilExpiration?: number;
 }
 
 /**
- * Credential manager configuration
+ * Credential security options
  */
-export interface CredentialManagerConfig {
-  /** Credential providers */
-  providers?: CredentialProvider[];
-  /** Enable usage tracking */
-  trackUsage?: boolean;
-  /** Enable automatic rotation */
-  autoRotate?: boolean;
-  /** Rotation policies by service */
-  rotationPolicies?: Record<string, RotationPolicy>;
-  /** Cache TTL in seconds */
-  cacheTTL?: number;
-  /** Enable encryption at rest */
+export interface SecurityOptions {
+  /** Encrypt credentials at rest */
   encryptAtRest?: boolean;
-  /** Encryption key */
-  encryptionKey?: string;
+  
+  /** Encryption algorithm */
+  encryptionAlgorithm?: string;
+  
+  /** Require secure transport */
+  requireSecureTransport?: boolean;
+  
+  /** Enable audit logging */
+  enableAudit?: boolean;
+  
+  /** Access control list */
+  acl?: Array<{
+    principal: string;
+    permissions: string[];
+  }>;
 }
 
 /**
  * Type guards
  */
-export class CredentialTypeGuards {
-  static isAPIKey(cred: AnyCredential): cred is APIKeyCredential {
-    return cred.type === CredentialType.API_KEY;
-  }
 
-  static isOAuthToken(cred: AnyCredential): cred is OAuthTokenCredential {
-    return cred.type === CredentialType.OAUTH_TOKEN;
-  }
-
-  static isBearerToken(cred: AnyCredential): cred is BearerTokenCredential {
-    return cred.type === CredentialType.BEARER_TOKEN;
-  }
-
-  static isBasicAuth(cred: AnyCredential): cred is BasicAuthCredential {
-    return cred.type === CredentialType.BASIC_AUTH;
-  }
-
-  static isSSHKey(cred: AnyCredential): cred is SSHKeyCredential {
-    return cred.type === CredentialType.SSH_KEY;
-  }
-
-  static isCertificate(cred: AnyCredential): cred is CertificateCredential {
-    return cred.type === CredentialType.CERTIFICATE;
-  }
-
-  static isServiceAccount(cred: AnyCredential): cred is ServiceAccountCredential {
-    return cred.type === CredentialType.SERVICE_ACCOUNT;
-  }
-
-  static isCustom(cred: AnyCredential): cred is CustomCredential {
-    return cred.type === CredentialType.CUSTOM;
-  }
+export function isOAuthCredential(
+  credential: Credential
+): credential is OAuthCredential {
+  return credential.type === CredentialType.OAUTH_TOKEN;
 }
 
-/**
- * Credential utilities
- */
-export class CredentialUtils {
-  /**
-   * Check if credential is expired
-   */
-  static isExpired(credential: AnyCredential): boolean {
-    if (!credential.expiresAt) {
-      return false;
-    }
-    return new Date() >= credential.expiresAt;
-  }
+export function isApiKeyCredential(
+  credential: Credential
+): credential is ApiKeyCredential {
+  return credential.type === CredentialType.API_KEY;
+}
 
-  /**
-   * Check if credential is expiring soon
-   */
-  static isExpiringSoon(credential: AnyCredential, thresholdDays: number = 7): boolean {
-    if (!credential.expiresAt) {
-      return false;
-    }
-    const threshold = new Date();
-    threshold.setDate(threshold.getDate() + thresholdDays);
-    return credential.expiresAt <= threshold;
-  }
+export function isBasicAuthCredential(
+  credential: Credential
+): credential is BasicAuthCredential {
+  return credential.type === CredentialType.BASIC_AUTH;
+}
 
-  /**
-   * Sanitize credential for logging (remove sensitive data)
-   */
-  static sanitize(credential: AnyCredential): Partial<AnyCredential> {
-    const { id, type, service, scope, expiresAt, createdAt, lastUsedAt, metadata } = credential;
-    return {
-      id,
-      type,
-      service,
-      scope,
-      expiresAt,
-      createdAt,
-      lastUsedAt,
-      metadata
-    };
-  }
+export function isSshKeyCredential(
+  credential: Credential
+): credential is SshKeyCredential {
+  return credential.type === CredentialType.SSH_KEY;
+}
 
-  /**
-   * Generate credential ID
-   */
-  static generateId(service: string, type: CredentialType): string {
-    const timestamp = Date.now();
-    const random = Math.random().toString(36).substring(2, 9);
-    return `${service}_${type}_${timestamp}_${random}`;
-  }
+export function isCertificateCredential(
+  credential: Credential
+): credential is CertificateCredential {
+  return credential.type === CredentialType.CERTIFICATE;
+}
 
-  /**
-   * Validate credential structure
-   */
-  static validate(credential: AnyCredential): ValidationResult {
-    const errors: string[] = [];
-    const warnings: string[] = [];
-
-    if (!credential.id) {
-      errors.push('Credential ID is required');
-    }
-
-    if (!credential.type) {
-      errors.push('Credential type is required');
-    }
-
-    if (!credential.service) {
-      errors.push('Service name is required');
-    }
-
-    if (this.isExpired(credential)) {
-      errors.push('Credential is expired');
-    }
-
-    if (this.isExpiringSoon(credential)) {
-      warnings.push('Credential is expiring soon');
-    }
-
-    return {
-      valid: errors.length === 0,
-      errors: errors.length > 0 ? errors : undefined,
-      warnings: warnings.length > 0 ? warnings : undefined
-    };
-  }
+export function isServiceAccountCredential(
+  credential: Credential
+): credential is ServiceAccountCredential {
+  return credential.type === CredentialType.SERVICE_ACCOUNT;
 }

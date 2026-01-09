@@ -4,10 +4,8 @@
  * Implements plugin discovery, loading, and registration logic.
  */
 
-import * as path from 'path';
-import { ToolRegistry } from '../core/registry';
-import { ToolDescriptor } from '../core/tool';
-import { PluginError } from '../core/errors';
+import { Tool } from '../core/tool';
+import { SDKError, ErrorCode, PluginError } from '../core/errors';
 import { Logger } from '../observability/logger';
 
 /**
@@ -16,18 +14,24 @@ import { Logger } from '../observability/logger';
 export interface PluginMetadata {
   /** Plugin name */
   name: string;
+  
   /** Plugin version */
   version: string;
+  
   /** Plugin description */
-  description?: string;
+  description: string;
+  
   /** Plugin author */
   author?: string;
-  /** Required SDK version */
-  sdkVersion?: string;
+  
+  /** Plugin homepage */
+  homepage?: string;
+  
   /** Plugin dependencies */
-  dependencies?: string[];
-  /** Plugin tags */
-  tags?: string[];
+  dependencies?: Record<string, string>;
+  
+  /** SDK version compatibility */
+  sdkVersion?: string;
 }
 
 /**
@@ -38,19 +42,20 @@ export interface Plugin {
   metadata: PluginMetadata;
   
   /**
-   * Initialize plugin
+   * Initialize the plugin
+   * @param context Plugin initialization context
    */
   initialize(context: PluginContext): Promise<void>;
   
   /**
-   * Register tools with registry
+   * Get tools provided by this plugin
    */
-  register(registry: ToolRegistry): Promise<void>;
+  getTools?(): Tool[];
   
   /**
-   * Shutdown plugin
+   * Cleanup plugin resources
    */
-  shutdown(): Promise<void>;
+  cleanup?(): Promise<void>;
 }
 
 /**
@@ -59,213 +64,266 @@ export interface Plugin {
 export interface PluginContext {
   /** SDK version */
   sdkVersion: string;
-  /** Configuration */
-  config: any;
-  /** Logger */
+  
+  /** Logger instance */
   logger: Logger;
+  
+  /** Configuration */
+  config?: Record<string, any>;
+  
+  /** Register a tool */
+  registerTool: (tool: Tool) => void;
 }
 
 /**
- * Plugin loader configuration
+ * Plugin loader options
  */
-export interface PluginLoaderConfig {
-  /** Plugin directories */
+export interface PluginLoaderOptions {
+  /** Plugin directories to search */
   directories?: string[];
-  /** Auto-load plugins */
+  
+  /** Auto-load plugins on initialization */
   autoLoad?: boolean;
-  /** Plugin whitelist */
-  whitelist?: string[];
-  /** Plugin blacklist */
-  blacklist?: string[];
+  
+  /** Plugin name filter */
+  filter?: (name: string) => boolean;
+  
+  /** Enable plugin sandboxing */
+  sandbox?: boolean;
 }
 
 /**
- * Plugin descriptor
+ * Plugin entry
  */
-interface PluginDescriptor {
-  metadata: PluginMetadata;
+interface PluginEntry {
   plugin: Plugin;
-  loaded: boolean;
-  error?: Error;
+  metadata: PluginMetadata;
+  loadedAt: Date;
+  initialized: boolean;
 }
 
 /**
- * Plugin loader class
+ * Plugin Loader Class
+ * 
+ * Responsibilities:
+ * - Discover plugins from configured directories
+ * - Load and initialize plugins at runtime
+ * - Register plugin-provided tools
+ * - Enforce compatibility and version checks
+ * - Manage plugin lifecycle
  */
 export class PluginLoader {
-  private config: PluginLoaderConfig;
-  private plugins: Map<string, PluginDescriptor>;
+  private plugins: Map<string, PluginEntry> = new Map();
   private logger: Logger;
+  private options: PluginLoaderOptions;
+  private sdkVersion: string;
 
-  constructor(directories?: string[], config?: PluginLoaderConfig) {
-    this.config = {
-      directories: directories || ['./plugins'],
-      autoLoad: true,
-      whitelist: [],
-      blacklist: [],
-      ...config
+  constructor(logger: Logger, sdkVersion: string, options: PluginLoaderOptions = {}) {
+    this.logger = logger;
+    this.sdkVersion = sdkVersion;
+    this.options = {
+      directories: [],
+      autoLoad: false,
+      sandbox: false,
+      ...options
     };
-
-    this.plugins = new Map();
-    this.logger = new Logger('PluginLoader');
   }
 
   /**
-   * Load all plugins
+   * Initialize the plugin loader
    */
-  async loadPlugins(registry: ToolRegistry): Promise<void> {
+  async initialize(): Promise<void> {
+    if (this.options.autoLoad) {
+      await this.loadAll();
+    }
+  }
+
+  /**
+   * Load all plugins from configured directories
+   */
+  async loadAll(): Promise<void> {
     this.logger.info('Loading plugins...');
 
-    for (const directory of this.config.directories || []) {
-      await this.loadFromDirectory(directory, registry);
-    }
-
-    this.logger.info(`Loaded ${this.plugins.size} plugins`);
+    // Plugin loading would scan directories and load plugin modules
+    // This is a placeholder for the actual implementation
+    
+    this.logger.info('Plugin loading complete', {
+      count: this.plugins.size
+    });
   }
 
   /**
-   * Load plugins from directory
+   * Load a specific plugin
    */
-  private async loadFromDirectory(directory: string, registry: ToolRegistry): Promise<void> {
+  async load(pluginName: string, pluginPath?: string): Promise<void> {
     try {
-      // In a real implementation, this would scan the directory
-      // const fs = require('fs/promises');
-      // const entries = await fs.readdir(directory, { withFileTypes: true });
-      
-      // for (const entry of entries) {
-      //   if (entry.isDirectory()) {
-      //     const pluginPath = path.join(directory, entry.name);
-      //     await this.loadPlugin(pluginPath, registry);
-      //   }
-      // }
-    } catch (error: any) {
-      this.logger.warn(`Failed to load plugins from ${directory}:`, error.message);
-    }
-  }
-
-  /**
-   * Load a single plugin
-   */
-  async loadPlugin(pluginPath: string, registry: ToolRegistry): Promise<void> {
-    try {
-      // In a real implementation, this would dynamically import the plugin
-      // const pluginModule = await import(pluginPath);
-      // const plugin: Plugin = pluginModule.default || pluginModule;
-
-      // Placeholder for demonstration
-      const plugin: Plugin = {
-        metadata: {
-          name: path.basename(pluginPath),
-          version: '1.0.0'
-        },
-        initialize: async () => {},
-        register: async () => {},
-        shutdown: async () => {}
-      };
-
-      // Check whitelist/blacklist
-      if (!this.isPluginAllowed(plugin.metadata.name)) {
-        this.logger.info(`Plugin ${plugin.metadata.name} is not allowed`);
+      // Check if already loaded
+      if (this.plugins.has(pluginName)) {
+        this.logger.warn('Plugin already loaded', { pluginName });
         return;
       }
 
-      // Validate plugin
-      this.validatePlugin(plugin);
+      // Load plugin module
+      // This would use dynamic import or require
+      // const pluginModule = await import(pluginPath || pluginName);
+      // const plugin: Plugin = pluginModule.default || pluginModule;
 
-      // Initialize plugin
-      const context: PluginContext = {
-        sdkVersion: '1.0.0',
-        config: {},
-        logger: this.logger.child(plugin.metadata.name)
-      };
+      // For now, throw not implemented
+      throw new PluginError(
+        pluginName,
+        'Plugin loading not yet implemented',
+        ErrorCode.PLUGIN_LOAD_FAILED
+      );
 
-      await plugin.initialize(context);
-
-      // Register tools
-      await plugin.register(registry);
-
-      // Store plugin descriptor
-      this.plugins.set(plugin.metadata.name, {
-        metadata: plugin.metadata,
-        plugin,
-        loaded: true
-      });
-
-      this.logger.info(`Loaded plugin: ${plugin.metadata.name} v${plugin.metadata.version}`);
-
-    } catch (error: any) {
-      this.logger.error(`Failed to load plugin from ${pluginPath}:`, error);
-      
-      // Store error
-      this.plugins.set(path.basename(pluginPath), {
-        metadata: { name: path.basename(pluginPath), version: 'unknown' },
-        plugin: null as any,
-        loaded: false,
-        error
-      });
+    } catch (error) {
+      this.logger.error('Failed to load plugin', error);
+      throw new PluginError(
+        pluginName,
+        `Failed to load plugin: ${error.message}`,
+        ErrorCode.PLUGIN_LOAD_FAILED,
+        { cause: error }
+      );
     }
   }
 
   /**
-   * Validate plugin
+   * Register a plugin
    */
-  private validatePlugin(plugin: Plugin): void {
-    if (!plugin.metadata) {
-      throw new PluginError('unknown', 'Plugin metadata is required');
+  async register(plugin: Plugin): Promise<void> {
+    const metadata = plugin.metadata;
+
+    // Validate metadata
+    this.validateMetadata(metadata);
+
+    // Check compatibility
+    if (!this.isCompatible(metadata)) {
+      throw new PluginError(
+        metadata.name,
+        `Plugin is not compatible with SDK version ${this.sdkVersion}`,
+        ErrorCode.PLUGIN_INCOMPATIBLE
+      );
     }
 
-    if (!plugin.metadata.name) {
-      throw new PluginError('unknown', 'Plugin name is required');
+    // Check if already registered
+    if (this.plugins.has(metadata.name)) {
+      throw new PluginError(
+        metadata.name,
+        'Plugin already registered',
+        ErrorCode.PLUGIN_LOAD_FAILED
+      );
     }
 
-    if (!plugin.metadata.version) {
-      throw new PluginError(plugin.metadata.name, 'Plugin version is required');
-    }
+    // Create plugin entry
+    const entry: PluginEntry = {
+      plugin,
+      metadata,
+      loadedAt: new Date(),
+      initialized: false
+    };
 
-    if (!plugin.initialize || typeof plugin.initialize !== 'function') {
-      throw new PluginError(plugin.metadata.name, 'Plugin must implement initialize()');
-    }
+    this.plugins.set(metadata.name, entry);
 
-    if (!plugin.register || typeof plugin.register !== 'function') {
-      throw new PluginError(plugin.metadata.name, 'Plugin must implement register()');
-    }
+    this.logger.info('Plugin registered', {
+      name: metadata.name,
+      version: metadata.version
+    });
 
-    if (!plugin.shutdown || typeof plugin.shutdown !== 'function') {
-      throw new PluginError(plugin.metadata.name, 'Plugin must implement shutdown()');
-    }
+    // Initialize the plugin
+    await this.initializePlugin(entry);
   }
 
   /**
-   * Check if plugin is allowed
+   * Unregister a plugin
    */
-  private isPluginAllowed(name: string): boolean {
-    // Check blacklist
-    if (this.config.blacklist && this.config.blacklist.includes(name)) {
-      return false;
+  async unregister(pluginName: string): Promise<void> {
+    const entry = this.plugins.get(pluginName);
+
+    if (!entry) {
+      throw new PluginError(
+        pluginName,
+        'Plugin not found',
+        ErrorCode.PLUGIN_NOT_FOUND
+      );
     }
 
-    // Check whitelist
-    if (this.config.whitelist && this.config.whitelist.length > 0) {
-      return this.config.whitelist.includes(name);
+    // Cleanup plugin
+    if (entry.plugin.cleanup) {
+      try {
+        await entry.plugin.cleanup();
+      } catch (error) {
+        this.logger.error('Plugin cleanup failed', error);
+      }
     }
 
-    return true;
+    this.plugins.delete(pluginName);
+
+    this.logger.info('Plugin unregistered', { name: pluginName });
   }
 
   /**
-   * Unload all plugins
+   * Get a plugin by name
    */
-  async unloadPlugins(): Promise<void> {
-    this.logger.info('Unloading plugins...');
+  get(pluginName: string): Plugin | undefined {
+    return this.plugins.get(pluginName)?.plugin;
+  }
 
-    for (const [name, descriptor] of this.plugins.entries()) {
-      if (descriptor.loaded) {
-        try {
-          await descriptor.plugin.shutdown();
-          this.logger.info(`Unloaded plugin: ${name}`);
-        } catch (error: any) {
-          this.logger.error(`Failed to unload plugin ${name}:`, error);
+  /**
+   * Check if a plugin is loaded
+   */
+  has(pluginName: string): boolean {
+    return this.plugins.has(pluginName);
+  }
+
+  /**
+   * List all loaded plugins
+   */
+  list(): PluginMetadata[] {
+    return Array.from(this.plugins.values()).map(entry => entry.metadata);
+  }
+
+  /**
+   * Get plugin statistics
+   */
+  getStats(): {
+    total: number;
+    initialized: number;
+    plugins: Array<{
+      name: string;
+      version: string;
+      initialized: boolean;
+      loadedAt: string;
+    }>;
+  } {
+    const plugins = Array.from(this.plugins.values()).map(entry => ({
+      name: entry.metadata.name,
+      version: entry.metadata.version,
+      initialized: entry.initialized,
+      loadedAt: entry.loadedAt.toISOString()
+    }));
+
+    return {
+      total: this.plugins.size,
+      initialized: plugins.filter(p => p.initialized).length,
+      plugins
+    };
+  }
+
+  /**
+   * Cleanup all plugins
+   */
+  async cleanup(): Promise<void> {
+    this.logger.info('Cleaning up plugins...');
+
+    for (const [name, entry] of this.plugins.entries()) {
+      try {
+        if (entry.plugin.cleanup) {
+          await entry.plugin.cleanup();
         }
+      } catch (error) {
+        this.logger.error('Plugin cleanup failed', {
+          plugin: name,
+          error: error.message
+        });
       }
     }
 
@@ -273,69 +331,92 @@ export class PluginLoader {
   }
 
   /**
-   * Get loaded plugins
+   * Initialize a plugin
    */
-  getLoadedPlugins(): PluginMetadata[] {
-    return Array.from(this.plugins.values())
-      .filter(d => d.loaded)
-      .map(d => d.metadata);
+  private async initializePlugin(entry: PluginEntry): Promise<void> {
+    const context: PluginContext = {
+      sdkVersion: this.sdkVersion,
+      logger: this.logger.child({ plugin: entry.metadata.name }),
+      registerTool: (tool: Tool) => {
+        // Tool registration would be handled by the SDK
+        this.logger.debug('Tool registered by plugin', {
+          plugin: entry.metadata.name,
+          tool: tool.getMetadata().name
+        });
+      }
+    };
+
+    try {
+      await entry.plugin.initialize(context);
+      entry.initialized = true;
+
+      this.logger.info('Plugin initialized', {
+        name: entry.metadata.name
+      });
+
+    } catch (error) {
+      this.logger.error('Plugin initialization failed', error);
+      throw new PluginError(
+        entry.metadata.name,
+        `Plugin initialization failed: ${error.message}`,
+        ErrorCode.PLUGIN_INITIALIZATION_FAILED,
+        { cause: error }
+      );
+    }
   }
 
   /**
-   * Get plugin by name
+   * Validate plugin metadata
    */
-  getPlugin(name: string): Plugin | undefined {
-    const descriptor = this.plugins.get(name);
-    return descriptor?.loaded ? descriptor.plugin : undefined;
+  private validateMetadata(metadata: PluginMetadata): void {
+    if (!metadata.name) {
+      throw new SDKError(
+        ErrorCode.PLUGIN_LOAD_FAILED,
+        'Plugin name is required'
+      );
+    }
+
+    if (!metadata.version) {
+      throw new SDKError(
+        ErrorCode.PLUGIN_LOAD_FAILED,
+        'Plugin version is required'
+      );
+    }
+
+    // Validate version format
+    const versionRegex = /^\d+\.\d+\.\d+(-[a-zA-Z0-9.-]+)?$/;
+    if (!versionRegex.test(metadata.version)) {
+      throw new SDKError(
+        ErrorCode.PLUGIN_LOAD_FAILED,
+        `Invalid plugin version format: ${metadata.version}`
+      );
+    }
   }
 
   /**
-   * Check if plugin is loaded
+   * Check if plugin is compatible with SDK
    */
-  isPluginLoaded(name: string): boolean {
-    const descriptor = this.plugins.get(name);
-    return descriptor?.loaded || false;
-  }
+  private isCompatible(metadata: PluginMetadata): boolean {
+    if (!metadata.sdkVersion) {
+      return true; // No version requirement
+    }
 
-  /**
-   * Get plugin errors
-   */
-  getErrors(): Array<{ plugin: string; error: Error }> {
-    return Array.from(this.plugins.entries())
-      .filter(([_, d]) => !d.loaded && d.error)
-      .map(([name, d]) => ({ plugin: name, error: d.error! }));
-  }
+    // Simple version compatibility check
+    // In production, this would use semver comparison
+    const [sdkMajor] = this.sdkVersion.split('.');
+    const [pluginMajor] = metadata.sdkVersion.split('.');
 
-  /**
-   * Get plugin count
-   */
-  getPluginCount(): number {
-    return Array.from(this.plugins.values()).filter(d => d.loaded).length;
+    return sdkMajor === pluginMajor;
   }
 }
 
 /**
- * Example plugin template
+ * Create a plugin loader instance
  */
-export class ExamplePlugin implements Plugin {
-  metadata: PluginMetadata = {
-    name: 'example-plugin',
-    version: '1.0.0',
-    description: 'An example plugin',
-    author: 'SDK Team'
-  };
-
-  async initialize(context: PluginContext): Promise<void> {
-    context.logger.info('Example plugin initialized');
-  }
-
-  async register(registry: ToolRegistry): Promise<void> {
-    // Register tools here
-    // const descriptor: ToolDescriptor = { ... };
-    // registry.register(descriptor);
-  }
-
-  async shutdown(): Promise<void> {
-    // Cleanup resources
-  }
+export function createPluginLoader(
+  logger: Logger,
+  sdkVersion: string,
+  options?: PluginLoaderOptions
+): PluginLoader {
+  return new PluginLoader(logger, sdkVersion, options);
 }

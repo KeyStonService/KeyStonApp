@@ -2,431 +2,558 @@
  * Credential Manager
  * 
  * Centralizes credential storage, retrieval, rotation, and usage tracking.
+ * Supports multiple credential providers with secure handling.
  */
 
-import {
-  AnyCredential,
-  CredentialProvider,
-  CredentialUsage,
-  CredentialManagerConfig,
-  RotationPolicy,
-  CredentialUtils,
-  ValidationResult
-} from './types';
-import { CredentialError } from '../core/errors';
+import { CredentialProvider, Credential, CredentialConfig } from './types';
+import { CredentialError, ErrorCode } from '../core/errors';
 import { Logger } from '../observability/logger';
+import { AuditLogger } from '../observability/audit';
 
 /**
  * Credential cache entry
  */
 interface CacheEntry {
-  credential: AnyCredential;
-  timestamp: Date;
+  credential: Credential;
+  cachedAt: Date;
+  expiresAt?: Date;
+  accessCount: number;
+  lastAccessedAt: Date;
 }
 
 /**
- * Credential Manager class
+ * Credential Manager Options
+ */
+export interface CredentialManagerOptions {
+  /** Credential providers to use */
+  providers?: string[];
+  
+  /** Default provider */
+  defaultProvider?: string;
+  
+  /** Cache TTL in milliseconds */
+  cacheTTL?: number;
+  
+  /** Enable credential caching */
+  enableCache?: boolean;
+  
+  /** Maximum cache size */
+  maxCacheSize?: number;
+}
+
+/**
+ * Credential Manager Class
+ * 
+ * Responsibilities:
+ * - Load credentials from multiple sources
+ * - Provide secure APIs for credential access
+ * - Support credential rotation and expiration
+ * - Track credential usage for audit
+ * - Cache credentials with TTL
  */
 export class CredentialManager {
-  private providers: CredentialProvider[];
-  private cache: Map<string, CacheEntry>;
-  private usageLog: CredentialUsage[];
-  private config: CredentialManagerConfig;
+  private providers: Map<string, CredentialProvider> = new Map();
+  private cache: Map<string, CacheEntry> = new Map();
   private logger: Logger;
-  private rotationTimers: Map<string, NodeJS.Timeout>;
+  private audit: AuditLogger;
+  private options: CredentialManagerOptions;
+  private initialized: boolean = false;
 
-  constructor(config: CredentialManagerConfig = {}) {
-    this.providers = [];
-    this.cache = new Map();
-    this.usageLog = [];
-    this.config = {
-      trackUsage: true,
-      autoRotate: false,
-      cacheTTL: 300, // 5 minutes default
-      encryptAtRest: false,
-      ...config
+  constructor(
+    options: CredentialManagerOptions = {},
+    logger: Logger,
+    audit: AuditLogger
+  ) {
+    this.options = {
+      cacheTTL: 300000, // 5 minutes default
+      enableCache: true,
+      maxCacheSize: 100,
+      ...options
     };
-    this.logger = new Logger('CredentialManager');
-    this.rotationTimers = new Map();
+    this.logger = logger;
+    this.audit = audit;
   }
 
   /**
-   * Initialize credential manager
+   * Initialize the credential manager
    */
-  async initialize(providers?: CredentialProvider[]): Promise<void> {
+  async initialize(): Promise<void> {
+    if (this.initialized) {
+      return;
+    }
+
     this.logger.info('Initializing credential manager...');
 
-    // Add provided providers
-    if (providers) {
-      for (const provider of providers) {
-        await this.addProvider(provider);
-      }
+    try {
+      // Load and initialize providers
+      await this.loadProviders();
+
+      this.initialized = true;
+      this.logger.info('Credential manager initialized', {
+        providerCount: this.providers.size
+      });
+
+      this.audit.log('credential_manager.initialized', {
+        providerCount: this.providers.size,
+        providers: Array.from(this.providers.keys())
+      });
+
+    } catch (error) {
+      this.logger.error('Failed to initialize credential manager', error);
+      throw new CredentialError(
+        'Credential manager initialization failed',
+        ErrorCode.CREDENTIAL_PROVIDER_FAILED,
+        { details: error }
+      );
     }
-
-    // Add default providers from config
-    if (this.config.providers) {
-      for (const provider of this.config.providers) {
-        await this.addProvider(provider);
-      }
-    }
-
-    // Sort providers by priority
-    this.providers.sort((a, b) => b.priority - a.priority);
-
-    // Setup rotation if enabled
-    if (this.config.autoRotate) {
-      await this.setupRotation();
-    }
-
-    this.logger.info(`Credential manager initialized with ${this.providers.length} providers`);
   }
 
   /**
-   * Add a credential provider
+   * Register a credential provider
+   * @param name Provider name
+   * @param provider Provider instance
    */
-  async addProvider(provider: CredentialProvider): Promise<void> {
-    await provider.initialize();
-    this.providers.push(provider);
-    this.logger.info(`Added credential provider: ${provider.name}`);
+  registerProvider(name: string, provider: CredentialProvider): void {
+    if (this.providers.has(name)) {
+      this.logger.warn('Overwriting existing credential provider', { name });
+    }
+
+    this.providers.set(name, provider);
+    this.logger.info('Credential provider registered', { name });
   }
 
   /**
-   * Get credential for a service
+   * Get a credential by key
+   * @param key Credential key
+   * @param scope Optional credential scope
+   * @returns Credential or undefined if not found
    */
-  async getCredential(service: string, scope?: string[]): Promise<AnyCredential> {
-    const cacheKey = this.getCacheKey(service, scope);
+  async getCredential(
+    key: string,
+    scope?: string
+  ): Promise<Credential | undefined> {
+    this.ensureInitialized();
+
+    const cacheKey = this.getCacheKey(key, scope);
 
     // Check cache first
-    if (this.isCacheValid(cacheKey)) {
-      const cached = this.cache.get(cacheKey)!;
-      this.logger.debug(`Credential cache hit for ${service}`);
-      
-      // Track usage
-      if (this.config.trackUsage) {
-        await this.trackUsage(cached.credential, 'cache_hit', true);
+    if (this.options.enableCache) {
+      const cached = this.getFromCache(cacheKey);
+      if (cached) {
+        this.logger.debug('Credential retrieved from cache', { key, scope });
+        this.audit.log('credential.accessed', {
+          key,
+          scope,
+          source: 'cache'
+        });
+        return cached;
       }
-      
-      return cached.credential;
     }
 
-    // Try each provider in priority order
-    for (const provider of this.providers) {
+    // Try each provider in order
+    for (const [providerName, provider] of this.providers.entries()) {
       try {
-        const credential = await provider.getCredential(service, scope);
+        const credential = await provider.getCredential(key, scope);
         
         if (credential) {
-          // Validate credential
-          const validation = CredentialUtils.validate(credential);
-          if (!validation.valid) {
-            this.logger.warn(`Invalid credential from ${provider.name}:`, validation.errors);
-            continue;
-          }
-
-          // Cache credential
-          this.cache.set(cacheKey, {
-            credential,
-            timestamp: new Date()
+          this.logger.debug('Credential retrieved from provider', {
+            key,
+            scope,
+            provider: providerName
           });
 
-          // Track usage
-          if (this.config.trackUsage) {
-            await this.trackUsage(credential, 'retrieved', true);
+          // Cache the credential
+          if (this.options.enableCache) {
+            this.addToCache(cacheKey, credential);
           }
 
-          this.logger.info(`Retrieved credential for ${service} from ${provider.name}`);
+          this.audit.log('credential.accessed', {
+            key,
+            scope,
+            source: providerName
+          });
+
           return credential;
         }
-      } catch (error: any) {
-        this.logger.warn(`Provider ${provider.name} failed:`, error.message);
+      } catch (error) {
+        this.logger.warn('Provider failed to retrieve credential', {
+          key,
+          scope,
+          provider: providerName,
+          error: error.message
+        });
       }
     }
 
-    throw new CredentialError(`No credential found for service: ${service}`);
+    this.logger.warn('Credential not found', { key, scope });
+    this.audit.log('credential.not_found', { key, scope });
+
+    return undefined;
   }
 
   /**
-   * Store a credential
+   * Get a credential or throw if not found
+   * @param key Credential key
+   * @param scope Optional credential scope
+   * @returns Credential
+   * @throws CredentialError if not found
    */
-  async storeCredential(credential: AnyCredential): Promise<void> {
-    // Validate credential
-    const validation = CredentialUtils.validate(credential);
-    if (!validation.valid) {
+  async getCredentialOrThrow(
+    key: string,
+    scope?: string
+  ): Promise<Credential> {
+    const credential = await this.getCredential(key, scope);
+
+    if (!credential) {
       throw new CredentialError(
-        `Invalid credential: ${validation.errors?.join(', ')}`,
-        credential.type
+        `Credential not found: ${key}`,
+        ErrorCode.CREDENTIAL_NOT_FOUND,
+        { context: { key, scope } }
       );
     }
 
-    // Store in first available provider
-    for (const provider of this.providers) {
-      try {
-        await provider.storeCredential(credential);
-        
-        // Invalidate cache
-        const cacheKey = this.getCacheKey(credential.service, credential.scope);
-        this.cache.delete(cacheKey);
+    return credential;
+  }
 
-        this.logger.info(`Stored credential for ${credential.service} in ${provider.name}`);
-        return;
-      } catch (error: any) {
-        this.logger.warn(`Failed to store in ${provider.name}:`, error.message);
-      }
+  /**
+   * Set a credential
+   * @param key Credential key
+   * @param value Credential value
+   * @param options Credential options
+   */
+  async setCredential(
+    key: string,
+    value: string,
+    options?: {
+      scope?: string;
+      expiresAt?: Date;
+      metadata?: Record<string, any>;
+      provider?: string;
+    }
+  ): Promise<void> {
+    this.ensureInitialized();
+
+    const credential: Credential = {
+      key,
+      value,
+      scope: options?.scope,
+      expiresAt: options?.expiresAt,
+      metadata: options?.metadata
+    };
+
+    // Use specified provider or default
+    const providerName = options?.provider || this.options.defaultProvider;
+    
+    if (!providerName) {
+      throw new CredentialError(
+        'No credential provider specified',
+        ErrorCode.CREDENTIAL_PROVIDER_FAILED
+      );
     }
 
-    throw new CredentialError('Failed to store credential in any provider');
+    const provider = this.providers.get(providerName);
+    
+    if (!provider) {
+      throw new CredentialError(
+        `Credential provider not found: ${providerName}`,
+        ErrorCode.CREDENTIAL_PROVIDER_FAILED
+      );
+    }
+
+    try {
+      await provider.setCredential(credential);
+
+      // Update cache
+      if (this.options.enableCache) {
+        const cacheKey = this.getCacheKey(key, options?.scope);
+        this.addToCache(cacheKey, credential);
+      }
+
+      this.logger.info('Credential set', {
+        key,
+        scope: options?.scope,
+        provider: providerName
+      });
+
+      this.audit.log('credential.set', {
+        key,
+        scope: options?.scope,
+        provider: providerName
+      });
+
+    } catch (error) {
+      this.logger.error('Failed to set credential', error);
+      throw new CredentialError(
+        `Failed to set credential: ${key}`,
+        ErrorCode.CREDENTIAL_PROVIDER_FAILED,
+        { cause: error }
+      );
+    }
   }
 
   /**
    * Delete a credential
+   * @param key Credential key
+   * @param scope Optional credential scope
    */
-  async deleteCredential(id: string): Promise<boolean> {
-    let deleted = false;
+  async deleteCredential(key: string, scope?: string): Promise<void> {
+    this.ensureInitialized();
 
-    for (const provider of this.providers) {
+    // Remove from cache
+    const cacheKey = this.getCacheKey(key, scope);
+    this.cache.delete(cacheKey);
+
+    // Delete from all providers
+    for (const [providerName, provider] of this.providers.entries()) {
       try {
-        if (await provider.deleteCredential(id)) {
-          deleted = true;
-          this.logger.info(`Deleted credential ${id} from ${provider.name}`);
-        }
-      } catch (error: any) {
-        this.logger.warn(`Failed to delete from ${provider.name}:`, error.message);
+        await provider.deleteCredential(key, scope);
+        this.logger.debug('Credential deleted from provider', {
+          key,
+          scope,
+          provider: providerName
+        });
+      } catch (error) {
+        this.logger.warn('Failed to delete credential from provider', {
+          key,
+          scope,
+          provider: providerName,
+          error: error.message
+        });
       }
     }
 
-    // Clear cache
-    this.clearCache();
-
-    return deleted;
-  }
-
-  /**
-   * Check if credential exists
-   */
-  async hasCredential(service: string, scope?: string[]): Promise<boolean> {
-    for (const provider of this.providers) {
-      try {
-        if (await provider.hasCredential(service, scope)) {
-          return true;
-        }
-      } catch (error: any) {
-        this.logger.warn(`Provider ${provider.name} check failed:`, error.message);
-      }
-    }
-
-    return false;
-  }
-
-  /**
-   * List all credentials
-   */
-  async listCredentials(): Promise<AnyCredential[]> {
-    const credentials: AnyCredential[] = [];
-    const seen = new Set<string>();
-
-    for (const provider of this.providers) {
-      try {
-        const providerCreds = await provider.listCredentials();
-        
-        for (const cred of providerCreds) {
-          if (!seen.has(cred.id)) {
-            credentials.push(cred as AnyCredential);
-            seen.add(cred.id);
-          }
-        }
-      } catch (error: any) {
-        this.logger.warn(`Failed to list from ${provider.name}:`, error.message);
-      }
-    }
-
-    return credentials;
+    this.audit.log('credential.deleted', { key, scope });
   }
 
   /**
    * Rotate a credential
+   * @param key Credential key
+   * @param newValue New credential value
+   * @param scope Optional credential scope
    */
-  async rotateCredential(service: string, scope?: string[]): Promise<AnyCredential> {
-    const policy = this.config.rotationPolicies?.[service];
-    
-    if (!policy || !policy.onRotate) {
-      throw new CredentialError(`No rotation policy defined for service: ${service}`);
-    }
+  async rotateCredential(
+    key: string,
+    newValue: string,
+    scope?: string
+  ): Promise<void> {
+    this.ensureInitialized();
 
     // Get current credential
-    const current = await this.getCredential(service, scope);
+    const current = await this.getCredential(key, scope);
 
-    // Execute rotation callback
-    const newCredential = await policy.onRotate(current);
-
-    // Store new credential
-    await this.storeCredential(newCredential);
-
-    // Delete old credential
-    await this.deleteCredential(current.id);
-
-    this.logger.info(`Rotated credential for ${service}`);
-
-    return newCredential;
-  }
-
-  /**
-   * Setup automatic rotation
-   */
-  private async setupRotation(): Promise<void> {
-    if (!this.config.rotationPolicies) {
-      return;
+    if (!current) {
+      throw new CredentialError(
+        `Cannot rotate non-existent credential: ${key}`,
+        ErrorCode.CREDENTIAL_NOT_FOUND
+      );
     }
 
-    for (const [service, policy] of Object.entries(this.config.rotationPolicies)) {
-      if (policy.enabled && policy.onRotate) {
-        const intervalMs = policy.intervalDays * 24 * 60 * 60 * 1000;
-        
-        const timer = setInterval(async () => {
-          try {
-            await this.rotateCredential(service);
-          } catch (error: any) {
-            this.logger.error(`Auto-rotation failed for ${service}:`, error);
-          }
-        }, intervalMs);
-
-        this.rotationTimers.set(service, timer);
-        this.logger.info(`Setup auto-rotation for ${service} (every ${policy.intervalDays} days)`);
+    // Set new credential
+    await this.setCredential(key, newValue, {
+      scope,
+      expiresAt: current.expiresAt,
+      metadata: {
+        ...current.metadata,
+        rotatedAt: new Date().toISOString(),
+        previousValue: current.value.substring(0, 4) + '...' // Log prefix only
       }
-    }
+    });
+
+    this.logger.info('Credential rotated', { key, scope });
+    this.audit.log('credential.rotated', { key, scope });
   }
 
   /**
-   * Track credential usage
+   * Check if a credential is expired
+   * @param credential Credential to check
+   * @returns true if expired
    */
-  private async trackUsage(
-    credential: AnyCredential,
-    operation: string,
-    success: boolean
-  ): Promise<void> {
-    const usage: CredentialUsage = {
-      credentialId: credential.id,
-      service: credential.service,
-      timestamp: new Date(),
-      operation,
-      success
-    };
-
-    this.usageLog.push(usage);
-
-    // Update last used timestamp
-    credential.lastUsedAt = new Date();
-
-    // Limit usage log size
-    if (this.usageLog.length > 10000) {
-      this.usageLog = this.usageLog.slice(-5000);
+  isExpired(credential: Credential): boolean {
+    if (!credential.expiresAt) {
+      return false;
     }
+
+    return new Date() > credential.expiresAt;
   }
 
   /**
-   * Get usage statistics
+   * Clear credential cache
    */
-  getUsageStats(service?: string): any {
-    const filtered = service
-      ? this.usageLog.filter(u => u.service === service)
-      : this.usageLog;
+  clearCache(): void {
+    const size = this.cache.size;
+    this.cache.clear();
+    this.logger.info('Credential cache cleared', { size });
+  }
 
-    const total = filtered.length;
-    const successful = filtered.filter(u => u.success).length;
-    const failed = total - successful;
+  /**
+   * Get cache statistics
+   */
+  getCacheStats(): {
+    size: number;
+    maxSize: number;
+    hitRate: number;
+    entries: Array<{
+      key: string;
+      accessCount: number;
+      lastAccessedAt: string;
+    }>;
+  } {
+    const entries = Array.from(this.cache.entries()).map(([key, entry]) => ({
+      key,
+      accessCount: entry.accessCount,
+      lastAccessedAt: entry.lastAccessedAt.toISOString()
+    }));
 
-    const byService: Record<string, number> = {};
-    for (const usage of filtered) {
-      byService[usage.service] = (byService[usage.service] || 0) + 1;
-    }
+    // Calculate hit rate (simplified)
+    const totalAccesses = entries.reduce((sum, e) => sum + e.accessCount, 0);
+    const hitRate = entries.length > 0 ? totalAccesses / entries.length : 0;
 
     return {
-      total,
-      successful,
-      failed,
-      successRate: total > 0 ? (successful / total) * 100 : 0,
-      byService
+      size: this.cache.size,
+      maxSize: this.options.maxCacheSize || 0,
+      hitRate,
+      entries
     };
+  }
+
+  /**
+   * Cleanup expired credentials and cache entries
+   */
+  async cleanup(): Promise<void> {
+    this.logger.info('Running credential cleanup...');
+
+    // Clean expired cache entries
+    const now = new Date();
+    let expiredCount = 0;
+
+    for (const [key, entry] of this.cache.entries()) {
+      if (entry.expiresAt && now > entry.expiresAt) {
+        this.cache.delete(key);
+        expiredCount++;
+      }
+    }
+
+    if (expiredCount > 0) {
+      this.logger.info('Expired cache entries removed', { count: expiredCount });
+    }
+
+    // Cleanup providers
+    for (const [name, provider] of this.providers.entries()) {
+      try {
+        if (provider.cleanup) {
+          await provider.cleanup();
+        }
+      } catch (error) {
+        this.logger.warn('Provider cleanup failed', {
+          provider: name,
+          error: error.message
+        });
+      }
+    }
   }
 
   /**
    * Get cache key
    */
-  private getCacheKey(service: string, scope?: string[]): string {
-    const scopeStr = scope ? scope.sort().join(',') : '';
-    return `${service}:${scopeStr}`;
+  private getCacheKey(key: string, scope?: string): string {
+    return scope ? `${key}:${scope}` : key;
   }
 
   /**
-   * Check if cache entry is valid
+   * Get credential from cache
    */
-  private isCacheValid(key: string): boolean {
-    const entry = this.cache.get(key);
+  private getFromCache(cacheKey: string): Credential | undefined {
+    const entry = this.cache.get(cacheKey);
+
     if (!entry) {
-      return false;
+      return undefined;
     }
 
-    const age = Date.now() - entry.timestamp.getTime();
-    const maxAge = (this.config.cacheTTL || 300) * 1000;
-
-    if (age > maxAge) {
-      this.cache.delete(key);
-      return false;
+    // Check if expired
+    if (entry.expiresAt && new Date() > entry.expiresAt) {
+      this.cache.delete(cacheKey);
+      return undefined;
     }
 
-    // Check if credential is expired
-    if (CredentialUtils.isExpired(entry.credential)) {
-      this.cache.delete(key);
-      return false;
-    }
+    // Update access stats
+    entry.accessCount++;
+    entry.lastAccessedAt = new Date();
 
-    return true;
+    return entry.credential;
   }
 
   /**
-   * Clear cache
+   * Add credential to cache
    */
-  clearCache(): void {
-    this.cache.clear();
-    this.logger.debug('Credential cache cleared');
-  }
-
-  /**
-   * Shutdown credential manager
-   */
-  async shutdown(): Promise<void> {
-    this.logger.info('Shutting down credential manager...');
-
-    // Clear rotation timers
-    for (const timer of this.rotationTimers.values()) {
-      clearInterval(timer);
-    }
-    this.rotationTimers.clear();
-
-    // Shutdown providers
-    for (const provider of this.providers) {
-      try {
-        await provider.shutdown();
-      } catch (error: any) {
-        this.logger.warn(`Provider ${provider.name} shutdown failed:`, error.message);
+  private addToCache(cacheKey: string, credential: Credential): void {
+    // Check cache size limit
+    if (
+      this.options.maxCacheSize &&
+      this.cache.size >= this.options.maxCacheSize
+    ) {
+      // Remove oldest entry
+      const oldestKey = this.findOldestCacheEntry();
+      if (oldestKey) {
+        this.cache.delete(oldestKey);
       }
     }
 
-    // Clear cache
-    this.clearCache();
+    const entry: CacheEntry = {
+      credential,
+      cachedAt: new Date(),
+      expiresAt: credential.expiresAt || this.calculateCacheExpiry(),
+      accessCount: 0,
+      lastAccessedAt: new Date()
+    };
 
-    this.logger.info('Credential manager shutdown complete');
+    this.cache.set(cacheKey, entry);
   }
 
   /**
-   * Get provider count
+   * Find oldest cache entry
    */
-  getProviderCount(): number {
-    return this.providers.length;
+  private findOldestCacheEntry(): string | undefined {
+    let oldestKey: string | undefined;
+    let oldestTime: Date | undefined;
+
+    for (const [key, entry] of this.cache.entries()) {
+      if (!oldestTime || entry.lastAccessedAt < oldestTime) {
+        oldestKey = key;
+        oldestTime = entry.lastAccessedAt;
+      }
+    }
+
+    return oldestKey;
   }
 
   /**
-   * Get cache size
+   * Calculate cache expiry time
    */
-  getCacheSize(): number {
-    return this.cache.size;
+  private calculateCacheExpiry(): Date {
+    return new Date(Date.now() + (this.options.cacheTTL || 300000));
+  }
+
+  /**
+   * Load credential providers
+   */
+  private async loadProviders(): Promise<void> {
+    // Providers will be loaded dynamically based on configuration
+    // This is a placeholder for the actual implementation
+    this.logger.debug('Loading credential providers...');
+    
+    // Default providers would be loaded here
+    // For now, this is handled by external registration
+  }
+
+  /**
+   * Ensure manager is initialized
+   */
+  private ensureInitialized(): void {
+    if (!this.initialized) {
+      throw new CredentialError(
+        'Credential manager not initialized',
+        ErrorCode.CREDENTIAL_PROVIDER_FAILED
+      );
+    }
   }
 }

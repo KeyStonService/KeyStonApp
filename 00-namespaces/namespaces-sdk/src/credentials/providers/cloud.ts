@@ -1,189 +1,307 @@
 /**
- * Cloud KMS Credential Provider
+ * Cloud Credential Provider (AWS, GCP, Azure)
  * 
- * Loads credentials from cloud key management services (AWS Secrets Manager, Azure Key Vault, GCP Secret Manager).
+ * Loads credentials from cloud secret management services.
  */
 
-import {
-  CredentialProvider,
-  AnyCredential,
-  Credential,
-  CredentialUtils
-} from '../types';
+import { CredentialProvider, Credential, CredentialType } from '../types';
 
 /**
  * Cloud provider type
  */
-export enum CloudProvider {
-  AWS = 'aws',
-  AZURE = 'azure',
-  GCP = 'gcp'
-}
+export type CloudProviderType = 'aws' | 'gcp' | 'azure';
 
 /**
- * Cloud provider configuration
+ * Cloud provider options
  */
-export interface CloudProviderConfig {
+export interface CloudProviderOptions {
   /** Cloud provider type */
-  provider: CloudProvider;
+  provider: CloudProviderType;
+  
   /** Region */
   region?: string;
-  /** Additional configuration */
-  config?: Record<string, any>;
+  
+  /** Secret name prefix */
+  prefix?: string;
+  
+  /** AWS-specific options */
+  aws?: {
+    accessKeyId?: string;
+    secretAccessKey?: string;
+    sessionToken?: string;
+  };
+  
+  /** GCP-specific options */
+  gcp?: {
+    projectId?: string;
+    keyFilename?: string;
+  };
+  
+  /** Azure-specific options */
+  azure?: {
+    vaultUrl?: string;
+    tenantId?: string;
+    clientId?: string;
+    clientSecret?: string;
+  };
 }
 
 /**
- * Cloud KMS credential provider
+ * Cloud Credential Provider
+ * 
+ * Integrates with cloud secret management services (AWS Secrets Manager, 
+ * GCP Secret Manager, Azure Key Vault).
+ * This is a placeholder implementation that would require cloud SDK libraries.
  */
 export class CloudCredentialProvider implements CredentialProvider {
-  name = 'cloud';
-  priority = 80; // Higher priority than file and vault
+  public readonly name = 'cloud';
+  private options: CloudProviderOptions;
+  private client: any;
 
-  private config: CloudProviderConfig;
-  private cache: Map<string, AnyCredential>;
-
-  constructor(config: CloudProviderConfig) {
-    this.config = config;
-    this.cache = new Map();
+  constructor(options: CloudProviderOptions) {
+    this.options = options;
   }
 
   async initialize(): Promise<void> {
-    // Initialize cloud SDK based on provider
-    switch (this.config.provider) {
-      case CloudProvider.AWS:
+    switch (this.options.provider) {
+      case 'aws':
         await this.initializeAWS();
         break;
-      case CloudProvider.AZURE:
-        await this.initializeAzure();
-        break;
-      case CloudProvider.GCP:
+      case 'gcp':
         await this.initializeGCP();
         break;
+      case 'azure':
+        await this.initializeAzure();
+        break;
+      default:
+        throw new Error(`Unsupported cloud provider: ${this.options.provider}`);
     }
   }
 
-  /**
-   * Initialize AWS Secrets Manager
-   */
-  private async initializeAWS(): Promise<void> {
-    // In a real implementation, this would initialize AWS SDK
-    // const AWS = require('aws-sdk');
-    // this.client = new AWS.SecretsManager({
-    //   region: this.config.region || 'us-east-1'
-    // });
+  async getCredential(key: string, scope?: string): Promise<Credential | undefined> {
+    const secretName = this.buildSecretName(key, scope);
+    
+    try {
+      switch (this.options.provider) {
+        case 'aws':
+          return await this.getAWSSecret(secretName);
+        case 'gcp':
+          return await this.getGCPSecret(secretName);
+        case 'azure':
+          return await this.getAzureSecret(secretName);
+        default:
+          throw new Error(`Unsupported cloud provider: ${this.options.provider}`);
+      }
+    } catch (error) {
+      if (this.isNotFoundError(error)) {
+        return undefined;
+      }
+      throw error;
+    }
+  }
+
+  async setCredential(credential: Credential): Promise<void> {
+    const secretName = this.buildSecretName(credential.key, credential.scope);
+    
+    switch (this.options.provider) {
+      case 'aws':
+        await this.setAWSSecret(secretName, credential.value);
+        break;
+      case 'gcp':
+        await this.setGCPSecret(secretName, credential.value);
+        break;
+      case 'azure':
+        await this.setAzureSecret(secretName, credential.value);
+        break;
+      default:
+        throw new Error(`Unsupported cloud provider: ${this.options.provider}`);
+    }
+  }
+
+  async deleteCredential(key: string, scope?: string): Promise<void> {
+    const secretName = this.buildSecretName(key, scope);
+    
+    switch (this.options.provider) {
+      case 'aws':
+        await this.deleteAWSSecret(secretName);
+        break;
+      case 'gcp':
+        await this.deleteGCPSecret(secretName);
+        break;
+      case 'azure':
+        await this.deleteAzureSecret(secretName);
+        break;
+      default:
+        throw new Error(`Unsupported cloud provider: ${this.options.provider}`);
+    }
+  }
+
+  supports(operation: string): boolean {
+    return ['get', 'set', 'delete'].includes(operation);
   }
 
   /**
-   * Initialize Azure Key Vault
+   * Initialize AWS Secrets Manager client
+   */
+  private async initializeAWS(): Promise<void> {
+    // Would use AWS SDK
+    // const { SecretsManagerClient } = require('@aws-sdk/client-secrets-manager');
+    // this.client = new SecretsManagerClient({
+    //   region: this.options.region,
+    //   credentials: this.options.aws
+    // });
+    
+    throw new Error('AWS Secrets Manager provider not yet implemented. Requires AWS SDK.');
+  }
+
+  /**
+   * Initialize GCP Secret Manager client
+   */
+  private async initializeGCP(): Promise<void> {
+    // Would use GCP SDK
+    // const { SecretManagerServiceClient } = require('@google-cloud/secret-manager');
+    // this.client = new SecretManagerServiceClient({
+    //   projectId: this.options.gcp?.projectId,
+    //   keyFilename: this.options.gcp?.keyFilename
+    // });
+    
+    throw new Error('GCP Secret Manager provider not yet implemented. Requires GCP SDK.');
+  }
+
+  /**
+   * Initialize Azure Key Vault client
    */
   private async initializeAzure(): Promise<void> {
-    // In a real implementation, this would initialize Azure SDK
+    // Would use Azure SDK
     // const { SecretClient } = require('@azure/keyvault-secrets');
     // const { DefaultAzureCredential } = require('@azure/identity');
     // this.client = new SecretClient(
-    //   this.config.config?.vaultUrl,
+    //   this.options.azure?.vaultUrl,
     //   new DefaultAzureCredential()
     // );
+    
+    throw new Error('Azure Key Vault provider not yet implemented. Requires Azure SDK.');
   }
 
   /**
-   * Initialize GCP Secret Manager
+   * Get secret from AWS Secrets Manager
    */
-  private async initializeGCP(): Promise<void> {
-    // In a real implementation, this would initialize GCP SDK
-    // const { SecretManagerServiceClient } = require('@google-cloud/secret-manager');
-    // this.client = new SecretManagerServiceClient();
-  }
-
-  async getCredential(service: string, scope?: string[]): Promise<AnyCredential | null> {
-    // Check cache first
-    if (this.cache.has(service)) {
-      return this.cache.get(service)!;
-    }
-
-    try {
-      let credential: AnyCredential | null = null;
-
-      switch (this.config.provider) {
-        case CloudProvider.AWS:
-          credential = await this.getFromAWS(service);
-          break;
-        case CloudProvider.AZURE:
-          credential = await this.getFromAzure(service);
-          break;
-        case CloudProvider.GCP:
-          credential = await this.getFromGCP(service);
-          break;
-      }
-
-      if (credential) {
-        this.cache.set(service, credential);
-      }
-
-      return credential;
-    } catch (error: any) {
-      console.warn(`Failed to get credential from ${this.config.provider}: ${error.message}`);
-      return null;
-    }
+  private async getAWSSecret(secretName: string): Promise<Credential | undefined> {
+    // const { GetSecretValueCommand } = require('@aws-sdk/client-secrets-manager');
+    // const response = await this.client.send(
+    //   new GetSecretValueCommand({ SecretId: secretName })
+    // );
+    // return {
+    //   key: secretName,
+    //   value: response.SecretString,
+    //   type: CredentialType.CUSTOM,
+    //   metadata: { source: 'aws-secrets-manager' }
+    // };
+    
+    throw new Error('AWS Secrets Manager not yet implemented');
   }
 
   /**
-   * Get credential from AWS Secrets Manager
+   * Get secret from GCP Secret Manager
    */
-  private async getFromAWS(service: string): Promise<AnyCredential | null> {
-    // In a real implementation:
-    // const result = await this.client.getSecretValue({ SecretId: service }).promise();
-    // return JSON.parse(result.SecretString);
-    return null;
-  }
-
-  /**
-   * Get credential from Azure Key Vault
-   */
-  private async getFromAzure(service: string): Promise<AnyCredential | null> {
-    // In a real implementation:
-    // const secret = await this.client.getSecret(service);
-    // return JSON.parse(secret.value);
-    return null;
-  }
-
-  /**
-   * Get credential from GCP Secret Manager
-   */
-  private async getFromGCP(service: string): Promise<AnyCredential | null> {
-    // In a real implementation:
-    // const name = `projects/${this.config.config?.projectId}/secrets/${service}/versions/latest`;
+  private async getGCPSecret(secretName: string): Promise<Credential | undefined> {
+    // const name = `projects/${this.options.gcp?.projectId}/secrets/${secretName}/versions/latest`;
     // const [version] = await this.client.accessSecretVersion({ name });
-    // return JSON.parse(version.payload.data.toString());
-    return null;
+    // return {
+    //   key: secretName,
+    //   value: version.payload.data.toString(),
+    //   type: CredentialType.CUSTOM,
+    //   metadata: { source: 'gcp-secret-manager' }
+    // };
+    
+    throw new Error('GCP Secret Manager not yet implemented');
   }
 
-  async hasCredential(service: string, scope?: string[]): Promise<boolean> {
-    const credential = await this.getCredential(service, scope);
-    return credential !== null;
+  /**
+   * Get secret from Azure Key Vault
+   */
+  private async getAzureSecret(secretName: string): Promise<Credential | undefined> {
+    // const secret = await this.client.getSecret(secretName);
+    // return {
+    //   key: secretName,
+    //   value: secret.value,
+    //   type: CredentialType.CUSTOM,
+    //   metadata: { source: 'azure-key-vault' }
+    // };
+    
+    throw new Error('Azure Key Vault not yet implemented');
   }
 
-  async storeCredential(credential: AnyCredential): Promise<void> {
-    // Implementation would depend on cloud provider
-    this.cache.set(credential.service, credential);
+  /**
+   * Set secret in AWS Secrets Manager
+   */
+  private async setAWSSecret(secretName: string, value: string): Promise<void> {
+    throw new Error('AWS Secrets Manager not yet implemented');
   }
 
-  async deleteCredential(id: string): Promise<boolean> {
-    // Implementation would depend on cloud provider
-    for (const [service, cred] of this.cache.entries()) {
-      if (cred.id === id) {
-        this.cache.delete(service);
-        return true;
-      }
+  /**
+   * Set secret in GCP Secret Manager
+   */
+  private async setGCPSecret(secretName: string, value: string): Promise<void> {
+    throw new Error('GCP Secret Manager not yet implemented');
+  }
+
+  /**
+   * Set secret in Azure Key Vault
+   */
+  private async setAzureSecret(secretName: string, value: string): Promise<void> {
+    throw new Error('Azure Key Vault not yet implemented');
+  }
+
+  /**
+   * Delete secret from AWS Secrets Manager
+   */
+  private async deleteAWSSecret(secretName: string): Promise<void> {
+    throw new Error('AWS Secrets Manager not yet implemented');
+  }
+
+  /**
+   * Delete secret from GCP Secret Manager
+   */
+  private async deleteGCPSecret(secretName: string): Promise<void> {
+    throw new Error('GCP Secret Manager not yet implemented');
+  }
+
+  /**
+   * Delete secret from Azure Key Vault
+   */
+  private async deleteAzureSecret(secretName: string): Promise<void> {
+    throw new Error('Azure Key Vault not yet implemented');
+  }
+
+  /**
+   * Build secret name with prefix
+   */
+  private buildSecretName(key: string, scope?: string): string {
+    const parts = [];
+    
+    if (this.options.prefix) {
+      parts.push(this.options.prefix);
     }
-    return false;
+    
+    if (scope) {
+      parts.push(scope);
+    }
+    
+    parts.push(key);
+    
+    return parts.join('/');
   }
 
-  async listCredentials(): Promise<Credential[]> {
-    return Array.from(this.cache.values()).map(cred => CredentialUtils.sanitize(cred) as Credential);
-  }
-
-  async shutdown(): Promise<void> {
-    this.cache.clear();
+  /**
+   * Check if error is a "not found" error
+   */
+  private isNotFoundError(error: any): boolean {
+    // Different cloud providers have different error codes
+    return (
+      error.name === 'ResourceNotFoundException' || // AWS
+      error.code === 5 || // GCP (NOT_FOUND)
+      error.statusCode === 404 // Azure
+    );
   }
 }

@@ -4,315 +4,358 @@
  * Implements tracing for tool invocations and cross-service calls.
  */
 
+import { randomUUID } from 'crypto';
+
 /**
- * Span context
+ * Span status
  */
-export interface SpanContext {
-  traceId: string;
-  spanId: string;
-  parentSpanId?: string;
-  flags?: number;
+export interface SpanStatus {
+  /** Status code (0 = OK, 1 = ERROR) */
+  code: number;
+  
+  /** Status message */
+  message?: string;
 }
+
+/**
+ * Span attributes
+ */
+export type SpanAttributes = Record<string, string | number | boolean>;
 
 /**
  * Span interface
  */
 export interface Span {
-  context: SpanContext;
+  /** Span ID */
+  spanId: string;
+  
+  /** Trace ID */
+  traceId: string;
+  
+  /** Parent span ID */
+  parentSpanId?: string;
+  
+  /** Span name */
   name: string;
+  
+  /** Start timestamp */
   startTime: Date;
+  
+  /** End timestamp */
   endTime?: Date;
-  attributes: Record<string, any>;
-  events: SpanEvent[];
+  
+  /** Span attributes */
+  attributes: SpanAttributes;
+  
+  /** Span status */
   status?: SpanStatus;
   
-  setAttribute(key: string, value: any): void;
-  addEvent(name: string, attributes?: Record<string, any>): void;
-  setStatus(status: SpanStatus): void;
-  end(): void;
+  /** Span events */
+  events: SpanEvent[];
 }
 
 /**
  * Span event
  */
 export interface SpanEvent {
+  /** Event name */
   name: string;
+  
+  /** Event timestamp */
   timestamp: Date;
-  attributes?: Record<string, any>;
+  
+  /** Event attributes */
+  attributes?: SpanAttributes;
 }
 
 /**
- * Span status
+ * Tracer options
  */
-export interface SpanStatus {
-  code: SpanStatusCode;
-  message?: string;
-}
-
-/**
- * Span status code
- */
-export enum SpanStatusCode {
-  UNSET = 0,
-  OK = 1,
-  ERROR = 2
-}
-
-/**
- * Tracer configuration
- */
-export interface TracerConfig {
-  serviceName?: string;
+export interface TracerOptions {
+  /** Enable tracing */
   enabled?: boolean;
+  
+  /** Service name */
+  serviceName?: string;
+  
+  /** Sampling rate (0-1) */
   samplingRate?: number;
-  exporter?: TraceExporter;
+  
+  /** Custom span processor */
+  processor?: (span: Span) => void;
 }
 
 /**
- * Trace exporter interface
- */
-export interface TraceExporter {
-  export(spans: Span[]): Promise<void>;
-  shutdown(): Promise<void>;
-}
-
-/**
- * Console trace exporter
- */
-export class ConsoleTraceExporter implements TraceExporter {
-  async export(spans: Span[]): Promise<void> {
-    for (const span of spans) {
-      console.log('[TRACE]', {
-        traceId: span.context.traceId,
-        spanId: span.context.spanId,
-        name: span.name,
-        duration: span.endTime 
-          ? span.endTime.getTime() - span.startTime.getTime()
-          : null,
-        attributes: span.attributes,
-        status: span.status
-      });
-    }
-  }
-
-  async shutdown(): Promise<void> {
-    // No-op for console exporter
-  }
-}
-
-/**
- * Span implementation
- */
-class SpanImpl implements Span {
-  context: SpanContext;
-  name: string;
-  startTime: Date;
-  endTime?: Date;
-  attributes: Record<string, any>;
-  events: SpanEvent[];
-  status?: SpanStatus;
-  private tracer: Tracer;
-
-  constructor(
-    name: string,
-    context: SpanContext,
-    attributes: Record<string, any>,
-    tracer: Tracer
-  ) {
-    this.name = name;
-    this.context = context;
-    this.startTime = new Date();
-    this.attributes = attributes;
-    this.events = [];
-    this.tracer = tracer;
-  }
-
-  setAttribute(key: string, value: any): void {
-    this.attributes[key] = value;
-  }
-
-  addEvent(name: string, attributes?: Record<string, any>): void {
-    this.events.push({
-      name,
-      timestamp: new Date(),
-      attributes
-    });
-  }
-
-  setStatus(status: SpanStatus): void {
-    this.status = status;
-  }
-
-  end(): void {
-    if (this.endTime) {
-      return; // Already ended
-    }
-
-    this.endTime = new Date();
-    this.tracer.endSpan(this);
-  }
-}
-
-/**
- * Tracer class
+ * Tracer Class
+ * 
+ * Responsibilities:
+ * - Generate trace spans for operations
+ * - Propagate trace context across boundaries
+ * - Support distributed tracing standards
+ * - Export traces to monitoring systems
  */
 export class Tracer {
-  private config: TracerConfig;
-  private activeSpans: Map<string, Span>;
-  private completedSpans: Span[];
-  private exporter: TraceExporter;
+  private options: Required<TracerOptions>;
+  private activeSpans: Map<string, Span> = new Map();
+  private completedSpans: Span[] = [];
+  private currentTraceId?: string;
 
-  constructor(config: TracerConfig = {}) {
-    this.config = {
-      serviceName: 'namespace-sdk',
-      enabled: true,
-      samplingRate: 1.0,
-      ...config
+  constructor(options: TracerOptions = {}) {
+    this.options = {
+      enabled: options.enabled !== false,
+      serviceName: options.serviceName || 'namespace-sdk',
+      samplingRate: options.samplingRate || 1.0,
+      processor: options.processor || this.defaultProcessor.bind(this)
     };
-
-    this.activeSpans = new Map();
-    this.completedSpans = [];
-    this.exporter = config.exporter || new ConsoleTraceExporter();
-  }
-
-  async initialize(): Promise<void> {
-    // Initialize tracer
   }
 
   /**
    * Start a new span
    */
-  startSpan(name: string, attributes: Record<string, any> = {}): Span {
-    if (!this.config.enabled) {
+  startSpan(name: string, attributes?: SpanAttributes): Span {
+    if (!this.options.enabled || !this.shouldSample()) {
       return this.createNoOpSpan(name);
     }
 
-    // Check sampling
-    if (Math.random() > (this.config.samplingRate || 1.0)) {
-      return this.createNoOpSpan(name);
+    const spanId = this.generateSpanId();
+    const traceId = this.currentTraceId || this.generateTraceId();
+    
+    // Set current trace ID if not set
+    if (!this.currentTraceId) {
+      this.currentTraceId = traceId;
     }
 
-    const context: SpanContext = {
-      traceId: this.generateTraceId(),
-      spanId: this.generateSpanId()
+    const span: Span = {
+      spanId,
+      traceId,
+      name,
+      startTime: new Date(),
+      attributes: {
+        'service.name': this.options.serviceName,
+        ...attributes
+      },
+      events: []
     };
 
-    const span = new SpanImpl(name, context, attributes, this);
-    this.activeSpans.set(context.spanId, span);
+    this.activeSpans.set(spanId, span);
 
-    return span;
+    return {
+      ...span,
+      setStatus: (status: SpanStatus) => {
+        span.status = status;
+      },
+      setAttribute: (key: string, value: string | number | boolean) => {
+        span.attributes[key] = value;
+      },
+      addEvent: (name: string, attributes?: SpanAttributes) => {
+        span.events.push({
+          name,
+          timestamp: new Date(),
+          attributes
+        });
+      },
+      end: () => {
+        this.endSpan(span);
+      }
+    } as any;
   }
 
   /**
    * Start a child span
    */
-  startChildSpan(parentSpan: Span, name: string, attributes: Record<string, any> = {}): Span {
-    if (!this.config.enabled) {
+  startChildSpan(
+    parentSpan: Span,
+    name: string,
+    attributes?: SpanAttributes
+  ): Span {
+    if (!this.options.enabled) {
       return this.createNoOpSpan(name);
     }
 
-    const context: SpanContext = {
-      traceId: parentSpan.context.traceId,
-      spanId: this.generateSpanId(),
-      parentSpanId: parentSpan.context.spanId
+    const spanId = this.generateSpanId();
+    
+    const span: Span = {
+      spanId,
+      traceId: parentSpan.traceId,
+      parentSpanId: parentSpan.spanId,
+      name,
+      startTime: new Date(),
+      attributes: {
+        'service.name': this.options.serviceName,
+        ...attributes
+      },
+      events: []
     };
 
-    const span = new SpanImpl(name, context, attributes, this);
-    this.activeSpans.set(context.spanId, span);
+    this.activeSpans.set(spanId, span);
 
-    return span;
+    return {
+      ...span,
+      setStatus: (status: SpanStatus) => {
+        span.status = status;
+      },
+      setAttribute: (key: string, value: string | number | boolean) => {
+        span.attributes[key] = value;
+      },
+      addEvent: (name: string, attributes?: SpanAttributes) => {
+        span.events.push({
+          name,
+          timestamp: new Date(),
+          attributes
+        });
+      },
+      end: () => {
+        this.endSpan(span);
+      }
+    } as any;
   }
 
   /**
-   * End a span (called by Span.end())
+   * End a span
    */
-  endSpan(span: Span): void {
-    this.activeSpans.delete(span.context.spanId);
+  private endSpan(span: Span): void {
+    span.endTime = new Date();
+    this.activeSpans.delete(span.spanId);
     this.completedSpans.push(span);
-
-    // Export if batch size reached
-    if (this.completedSpans.length >= 100) {
-      this.flush();
-    }
+    
+    // Process the span
+    this.options.processor(span);
   }
 
   /**
-   * Flush completed spans
+   * Get current trace ID
+   */
+  getCurrentTraceId(): string | undefined {
+    return this.currentTraceId;
+  }
+
+  /**
+   * Set current trace ID
+   */
+  setCurrentTraceId(traceId: string): void {
+    this.currentTraceId = traceId;
+  }
+
+  /**
+   * Clear current trace ID
+   */
+  clearCurrentTraceId(): void {
+    this.currentTraceId = undefined;
+  }
+
+  /**
+   * Get active spans
+   */
+  getActiveSpans(): Span[] {
+    return Array.from(this.activeSpans.values());
+  }
+
+  /**
+   * Get completed spans
+   */
+  getCompletedSpans(): Span[] {
+    return [...this.completedSpans];
+  }
+
+  /**
+   * Clear completed spans
+   */
+  clearCompletedSpans(): void {
+    this.completedSpans = [];
+  }
+
+  /**
+   * Flush all spans
    */
   async flush(): Promise<void> {
-    if (this.completedSpans.length === 0) {
-      return;
+    // End all active spans
+    for (const span of this.activeSpans.values()) {
+      this.endSpan(span);
     }
 
-    const spans = this.completedSpans.splice(0);
-    
-    try {
-      await this.exporter.export(spans);
-    } catch (error) {
-      console.error('Failed to export spans:', error);
-    }
+    // Clear completed spans
+    this.completedSpans = [];
+    this.currentTraceId = undefined;
   }
 
   /**
-   * Generate trace ID
+   * Enable or disable tracing
    */
-  private generateTraceId(): string {
-    return this.generateId(32);
+  setEnabled(enabled: boolean): void {
+    this.options.enabled = enabled;
   }
 
   /**
-   * Generate span ID
+   * Check if tracing is enabled
+   */
+  isEnabled(): boolean {
+    return this.options.enabled;
+  }
+
+  /**
+   * Generate a span ID
    */
   private generateSpanId(): string {
-    return this.generateId(16);
+    return randomUUID().replace(/-/g, '').substring(0, 16);
   }
 
   /**
-   * Generate random ID
+   * Generate a trace ID
    */
-  private generateId(length: number): string {
-    const chars = '0123456789abcdef';
-    let result = '';
-    for (let i = 0; i < length; i++) {
-      result += chars[Math.floor(Math.random() * chars.length)];
-    }
-    return result;
+  private generateTraceId(): string {
+    return randomUUID().replace(/-/g, '');
   }
 
   /**
-   * Create no-op span
+   * Check if span should be sampled
+   */
+  private shouldSample(): boolean {
+    return Math.random() < this.options.samplingRate;
+  }
+
+  /**
+   * Create a no-op span
    */
   private createNoOpSpan(name: string): Span {
     return {
-      context: {
-        traceId: '',
-        spanId: ''
-      },
+      spanId: '',
+      traceId: '',
       name,
       startTime: new Date(),
       attributes: {},
       events: [],
+      setStatus: () => {},
       setAttribute: () => {},
       addEvent: () => {},
-      setStatus: () => {},
       end: () => {}
-    };
+    } as any;
   }
 
   /**
-   * Get active span count
+   * Default span processor
    */
-  getActiveSpanCount(): number {
-    return this.activeSpans.size;
-  }
+  private defaultProcessor(span: Span): void {
+    // Default processor just logs the span
+    // In production, this would export to a tracing backend
+    if (this.options.enabled) {
+      const duration = span.endTime
+        ? span.endTime.getTime() - span.startTime.getTime()
+        : 0;
 
-  /**
-   * Shutdown tracer
-   */
-  async shutdown(): Promise<void> {
-    await this.flush();
-    await this.exporter.shutdown();
-    this.activeSpans.clear();
-    this.completedSpans = [];
+      console.debug('[TRACE]', {
+        traceId: span.traceId,
+        spanId: span.spanId,
+        name: span.name,
+        duration: `${duration}ms`,
+        status: span.status?.code === 0 ? 'OK' : 'ERROR'
+      });
+    }
   }
+}
+
+/**
+ * Create a tracer instance
+ */
+export function createTracer(options?: TracerOptions): Tracer {
+  return new Tracer(options);
 }

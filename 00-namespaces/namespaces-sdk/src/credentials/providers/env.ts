@@ -4,129 +4,139 @@
  * Loads credentials from environment variables.
  */
 
-import {
-  CredentialProvider,
-  AnyCredential,
-  Credential,
-  CredentialType,
-  APIKeyCredential,
-  BearerTokenCredential,
-  BasicAuthCredential,
-  CredentialUtils
-} from '../types';
+import { CredentialProvider, Credential, CredentialType } from '../types';
 
 /**
- * Environment variable credential provider
+ * Environment variable provider options
+ */
+export interface EnvProviderOptions {
+  /** Prefix for environment variables (e.g., 'SDK_') */
+  prefix?: string;
+  
+  /** Variable name mappings (key -> env var name) */
+  mappings?: Record<string, string>;
+  
+  /** Whether to convert keys to uppercase */
+  uppercase?: boolean;
+}
+
+/**
+ * Environment Variable Credential Provider
+ * 
+ * Loads credentials from process.env with optional prefix and mappings.
  */
 export class EnvCredentialProvider implements CredentialProvider {
-  name = 'env';
-  priority = 100; // High priority
+  public readonly name = 'env';
+  private options: EnvProviderOptions;
 
-  private credentials: Map<string, AnyCredential>;
-  private envPrefix: string;
-
-  constructor(envPrefix: string = 'SDK_CRED_') {
-    this.credentials = new Map();
-    this.envPrefix = envPrefix;
+  constructor(options: EnvProviderOptions = {}) {
+    this.options = {
+      prefix: '',
+      uppercase: true,
+      ...options
+    };
   }
 
   async initialize(): Promise<void> {
-    // Load credentials from environment variables
-    this.loadFromEnv();
+    // No initialization needed for env provider
+  }
+
+  async getCredential(key: string, scope?: string): Promise<Credential | undefined> {
+    const envVarName = this.getEnvVarName(key, scope);
+    const value = process.env[envVarName];
+
+    if (!value) {
+      return undefined;
+    }
+
+    return {
+      key,
+      value,
+      scope,
+      type: this.inferCredentialType(key),
+      metadata: {
+        source: 'environment',
+        envVarName
+      }
+    };
+  }
+
+  async setCredential(credential: Credential): Promise<void> {
+    const envVarName = this.getEnvVarName(credential.key, credential.scope);
+    process.env[envVarName] = credential.value;
+  }
+
+  async deleteCredential(key: string, scope?: string): Promise<void> {
+    const envVarName = this.getEnvVarName(key, scope);
+    delete process.env[envVarName];
+  }
+
+  async listCredentials(): Promise<string[]> {
+    const prefix = this.options.prefix || '';
+    const keys: string[] = [];
+
+    for (const key of Object.keys(process.env)) {
+      if (key.startsWith(prefix)) {
+        keys.push(key.substring(prefix.length));
+      }
+    }
+
+    return keys;
+  }
+
+  supports(operation: string): boolean {
+    return ['get', 'set', 'delete', 'list'].includes(operation);
   }
 
   /**
-   * Load credentials from environment variables
+   * Get environment variable name for a credential key
    */
-  private loadFromEnv(): void {
-    const env = process.env;
-
-    // Pattern: SDK_CRED_<SERVICE>_<TYPE>=<value>
-    for (const [key, value] of Object.entries(env)) {
-      if (!key.startsWith(this.envPrefix) || !value) {
-        continue;
-      }
-
-      try {
-        const parts = key.substring(this.envPrefix.length).split('_');
-        if (parts.length < 2) continue;
-
-        const service = parts[0].toLowerCase();
-        const field = parts.slice(1).join('_').toLowerCase();
-
-        // Create or update credential
-        this.processEnvVar(service, field, value);
-      } catch (error: any) {
-        console.warn(`Failed to parse credential from ${key}:`, error.message);
-      }
+  private getEnvVarName(key: string, scope?: string): string {
+    // Check mappings first
+    if (this.options.mappings && this.options.mappings[key]) {
+      return this.options.mappings[key];
     }
+
+    // Build env var name
+    let envVarName = key;
+
+    if (scope) {
+      envVarName = `${key}_${scope}`;
+    }
+
+    if (this.options.uppercase) {
+      envVarName = envVarName.toUpperCase();
+    }
+
+    if (this.options.prefix) {
+      envVarName = `${this.options.prefix}${envVarName}`;
+    }
+
+    return envVarName;
   }
 
   /**
-   * Process environment variable
+   * Infer credential type from key name
    */
-  private processEnvVar(service: string, field: string, value: string): void {
-    const credId = CredentialUtils.generateId(service, CredentialType.API_KEY);
+  private inferCredentialType(key: string): CredentialType {
+    const lowerKey = key.toLowerCase();
 
-    // Determine credential type and create appropriate credential
-    if (field === 'api_key' || field === 'apikey') {
-      const credential: APIKeyCredential = {
-        id: credId,
-        type: CredentialType.API_KEY,
-        service,
-        apiKey: value,
-        createdAt: new Date()
-      };
-      this.credentials.set(service, credential);
-    } else if (field === 'token' || field === 'bearer_token') {
-      const credential: BearerTokenCredential = {
-        id: credId,
-        type: CredentialType.BEARER_TOKEN,
-        service,
-        token: value,
-        createdAt: new Date()
-      };
-      this.credentials.set(service, credential);
-    } else if (field === 'username') {
-      // For basic auth, we need both username and password
-      const password = process.env[`${this.envPrefix}${service.toUpperCase()}_PASSWORD`];
-      if (password) {
-        const credential: BasicAuthCredential = {
-          id: credId,
-          type: CredentialType.BASIC_AUTH,
-          service,
-          username: value,
-          password,
-          createdAt: new Date()
-        };
-        this.credentials.set(service, credential);
-      }
+    if (lowerKey.includes('token')) {
+      return CredentialType.BEARER_TOKEN;
     }
-  }
 
-  async getCredential(service: string, scope?: string[]): Promise<AnyCredential | null> {
-    return this.credentials.get(service) || null;
-  }
+    if (lowerKey.includes('api_key') || lowerKey.includes('apikey')) {
+      return CredentialType.API_KEY;
+    }
 
-  async hasCredential(service: string, scope?: string[]): Promise<boolean> {
-    return this.credentials.has(service);
-  }
+    if (lowerKey.includes('oauth')) {
+      return CredentialType.OAUTH_TOKEN;
+    }
 
-  async storeCredential(credential: AnyCredential): Promise<void> {
-    // Environment provider is read-only
-    throw new Error('EnvCredentialProvider is read-only');
-  }
+    if (lowerKey.includes('ssh')) {
+      return CredentialType.SSH_KEY;
+    }
 
-  async deleteCredential(id: string): Promise<boolean> {
-    // Environment provider is read-only
-    throw new Error('EnvCredentialProvider is read-only');
-  }
-
-  async listCredentials(): Promise<Credential[]> {
-    return Array.from(this.credentials.values()).map(cred => CredentialUtils.sanitize(cred) as Credential);
-  }
-
-  async shutdown(): Promise<void> {
-    this.credentials.clear();
+    return CredentialType.CUSTOM;
   }
 }

@@ -2,108 +2,233 @@
  * Schema Registry and Versioning
  * 
  * Manages registration, lookup, and versioning of all schemas used in the SDK.
+ * Supports dynamic schema loading and compatibility checks.
  */
 
-import {
-  JSONSchema,
-  VersionedSchema,
-  SchemaMetadata,
-  SchemaRegistryEntry,
-  CompatibilityResult,
-  BreakingChange,
-  SchemaUtils
-} from './types';
+import { JSONSchema } from '../core/tool';
+import { SDKError, ErrorCode } from '../core/errors';
+import { Logger } from '../observability/logger';
 
 /**
- * Schema Registry class
+ * Schema version information
+ */
+export interface SchemaVersion {
+  /** Version string (semantic versioning) */
+  version: string;
+  
+  /** Schema definition */
+  schema: JSONSchema;
+  
+  /** Registration timestamp */
+  registeredAt: Date;
+  
+  /** Whether this version is deprecated */
+  deprecated?: boolean;
+  
+  /** Deprecation message */
+  deprecationMessage?: string;
+  
+  /** Migration guide to newer version */
+  migrationGuide?: string;
+}
+
+/**
+ * Schema entry in registry
+ */
+interface SchemaEntry {
+  /** Schema name/ID */
+  name: string;
+  
+  /** All versions of this schema */
+  versions: Map<string, SchemaVersion>;
+  
+  /** Latest version */
+  latestVersion: string;
+  
+  /** Schema metadata */
+  metadata?: {
+    description?: string;
+    category?: string;
+    tags?: string[];
+  };
+}
+
+/**
+ * Schema compatibility check result
+ */
+export interface CompatibilityResult {
+  /** Whether schemas are compatible */
+  compatible: boolean;
+  
+  /** Compatibility issues if any */
+  issues?: string[];
+  
+  /** Breaking changes */
+  breakingChanges?: string[];
+}
+
+/**
+ * Schema Registry Class
+ * 
+ * Responsibilities:
+ * - Register and retrieve schemas by name and version
+ * - Support schema migration and compatibility checks
+ * - Enforce immutability of published schemas
+ * - Support dynamic schema loading
  */
 export class SchemaRegistry {
-  private schemas: Map<string, SchemaRegistryEntry>;
-  private schemasByHash: Map<string, string>; // hash -> id mapping
+  private schemas: Map<string, SchemaEntry> = new Map();
+  private logger: Logger;
+  private immutable: boolean;
 
-  constructor() {
-    this.schemas = new Map();
-    this.schemasByHash = new Map();
+  constructor(logger: Logger, options?: { immutable?: boolean }) {
+    this.logger = logger;
+    this.immutable = options?.immutable !== false;
   }
 
   /**
    * Register a schema
+   * @param name Schema name/ID
+   * @param version Schema version
+   * @param schema Schema definition
+   * @param options Registration options
    */
-  register(versionedSchema: VersionedSchema): void {
-    const { metadata, schema } = versionedSchema;
-    const { id, version } = metadata;
+  register(
+    name: string,
+    version: string,
+    schema: JSONSchema,
+    options?: {
+      metadata?: {
+        description?: string;
+        category?: string;
+        tags?: string[];
+      };
+      setAsLatest?: boolean;
+    }
+  ): void {
+    // Validate version format
+    this.validateVersion(version);
 
-    // Get or create registry entry
-    let entry = this.schemas.get(id);
+    // Get or create schema entry
+    let entry = this.schemas.get(name);
+    
     if (!entry) {
       entry = {
-        id,
+        name,
         versions: new Map(),
-        latestVersion: version
+        latestVersion: version,
+        metadata: options?.metadata
       };
-      this.schemas.set(id, entry);
+      this.schemas.set(name, entry);
     }
 
     // Check if version already exists
     if (entry.versions.has(version)) {
-      throw new Error(`Schema ${id} version ${version} already registered`);
+      if (this.immutable) {
+        throw new SDKError(
+          ErrorCode.SCHEMA_VERSION_MISMATCH,
+          `Schema version already exists and is immutable: ${name}@${version}`
+        );
+      }
+      
+      this.logger.warn('Overwriting existing schema version', {
+        name,
+        version
+      });
     }
 
-    // Add version
-    entry.versions.set(version, versionedSchema);
+    // Register the version
+    const schemaVersion: SchemaVersion = {
+      version,
+      schema,
+      registeredAt: new Date()
+    };
 
-    // Update latest version if newer
-    if (this.compareVersions(version, entry.latestVersion) > 0) {
+    entry.versions.set(version, schemaVersion);
+
+    // Update latest version if requested or if this is the first version
+    if (options?.setAsLatest || entry.versions.size === 1) {
       entry.latestVersion = version;
     }
 
-    // Add hash mapping
-    const hash = SchemaUtils.hash(schema);
-    this.schemasByHash.set(hash, id);
+    this.logger.info('Schema registered', {
+      name,
+      version,
+      isLatest: entry.latestVersion === version
+    });
   }
 
   /**
-   * Get a schema by ID and version
+   * Get a schema by name and version
+   * @param name Schema name
+   * @param version Schema version (optional, defaults to latest)
+   * @returns Schema or undefined if not found
    */
-  get(id: string, version?: string): VersionedSchema | undefined {
-    const entry = this.schemas.get(id);
+  get(name: string, version?: string): JSONSchema | undefined {
+    const entry = this.schemas.get(name);
+    
     if (!entry) {
       return undefined;
     }
 
     const targetVersion = version || entry.latestVersion;
-    return entry.versions.get(targetVersion);
-  }
+    const schemaVersion = entry.versions.get(targetVersion);
 
-  /**
-   * Get latest schema version
-   */
-  getLatest(id: string): VersionedSchema | undefined {
-    const entry = this.schemas.get(id);
-    if (!entry) {
+    if (!schemaVersion) {
       return undefined;
     }
 
-    return entry.versions.get(entry.latestVersion);
+    // Log warning if deprecated
+    if (schemaVersion.deprecated) {
+      this.logger.warn('Using deprecated schema version', {
+        name,
+        version: targetVersion,
+        message: schemaVersion.deprecationMessage
+      });
+    }
+
+    return schemaVersion.schema;
+  }
+
+  /**
+   * Get schema version information
+   * @param name Schema name
+   * @param version Schema version
+   * @returns Schema version info or undefined
+   */
+  getVersion(name: string, version: string): SchemaVersion | undefined {
+    const entry = this.schemas.get(name);
+    return entry?.versions.get(version);
+  }
+
+  /**
+   * Get latest version of a schema
+   * @param name Schema name
+   * @returns Latest schema or undefined
+   */
+  getLatest(name: string): JSONSchema | undefined {
+    return this.get(name);
   }
 
   /**
    * Get all versions of a schema
+   * @param name Schema name
+   * @returns Array of version strings
    */
-  getVersions(id: string): string[] {
-    const entry = this.schemas.get(id);
-    if (!entry) {
-      return [];
-    }
-
-    return Array.from(entry.versions.keys()).sort(this.compareVersions);
+  getVersions(name: string): string[] {
+    const entry = this.schemas.get(name);
+    return entry ? Array.from(entry.versions.keys()) : [];
   }
 
   /**
-   * Check if schema exists
+   * Check if a schema exists
+   * @param name Schema name
+   * @param version Optional version
+   * @returns true if schema exists
    */
-  has(id: string, version?: string): boolean {
-    const entry = this.schemas.get(id);
+  has(name: string, version?: string): boolean {
+    const entry = this.schemas.get(name);
+    
     if (!entry) {
       return false;
     }
@@ -116,246 +241,214 @@ export class SchemaRegistry {
   }
 
   /**
-   * List all schema IDs
+   * Deprecate a schema version
+   * @param name Schema name
+   * @param version Schema version
+   * @param message Deprecation message
+   * @param migrationGuide Optional migration guide
+   */
+  deprecate(
+    name: string,
+    version: string,
+    message: string,
+    migrationGuide?: string
+  ): void {
+    const entry = this.schemas.get(name);
+    
+    if (!entry) {
+      throw new SDKError(
+        ErrorCode.SCHEMA_NOT_FOUND,
+        `Schema not found: ${name}`
+      );
+    }
+
+    const schemaVersion = entry.versions.get(version);
+    
+    if (!schemaVersion) {
+      throw new SDKError(
+        ErrorCode.SCHEMA_NOT_FOUND,
+        `Schema version not found: ${name}@${version}`
+      );
+    }
+
+    schemaVersion.deprecated = true;
+    schemaVersion.deprecationMessage = message;
+    schemaVersion.migrationGuide = migrationGuide;
+
+    this.logger.info('Schema version deprecated', {
+      name,
+      version,
+      message
+    });
+  }
+
+  /**
+   * Check compatibility between two schema versions
+   * @param name Schema name
+   * @param fromVersion Source version
+   * @param toVersion Target version
+   * @returns Compatibility result
+   */
+  checkCompatibility(
+    name: string,
+    fromVersion: string,
+    toVersion: string
+  ): CompatibilityResult {
+    const fromSchema = this.get(name, fromVersion);
+    const toSchema = this.get(name, toVersion);
+
+    if (!fromSchema || !toSchema) {
+      throw new SDKError(
+        ErrorCode.SCHEMA_NOT_FOUND,
+        `Schema version not found: ${name}`
+      );
+    }
+
+    return this.compareSchemas(fromSchema, toSchema);
+  }
+
+  /**
+   * List all registered schemas
+   * @returns Array of schema names
    */
   list(): string[] {
     return Array.from(this.schemas.keys());
   }
 
   /**
-   * Find schema by hash
+   * Get registry statistics
    */
-  findByHash(hash: string): VersionedSchema | undefined {
-    const id = this.schemasByHash.get(hash);
-    if (!id) {
-      return undefined;
-    }
+  getStats(): {
+    totalSchemas: number;
+    totalVersions: number;
+    schemas: Array<{
+      name: string;
+      versions: number;
+      latestVersion: string;
+    }>;
+  } {
+    const schemas = Array.from(this.schemas.values()).map(entry => ({
+      name: entry.name,
+      versions: entry.versions.size,
+      latestVersion: entry.latestVersion
+    }));
 
-    return this.getLatest(id);
+    const totalVersions = schemas.reduce((sum, s) => sum + s.versions, 0);
+
+    return {
+      totalSchemas: this.schemas.size,
+      totalVersions,
+      schemas
+    };
   }
 
   /**
-   * Check compatibility between two schema versions
+   * Clear all schemas
    */
-  checkCompatibility(
-    id: string,
-    oldVersion: string,
-    newVersion: string
-  ): CompatibilityResult {
-    const oldSchema = this.get(id, oldVersion);
-    const newSchema = this.get(id, newVersion);
+  clear(): void {
+    const count = this.schemas.size;
+    this.schemas.clear();
+    this.logger.info('Schema registry cleared', { count });
+  }
 
-    if (!oldSchema || !newSchema) {
-      return {
-        compatible: false,
-        breakingChanges: [{
-          type: 'other',
-          path: '',
-          description: 'One or both schema versions not found'
-        }]
+  /**
+   * Export registry as JSON
+   */
+  toJSON(): any {
+    const schemas: any = {};
+
+    for (const [name, entry] of this.schemas.entries()) {
+      schemas[name] = {
+        latestVersion: entry.latestVersion,
+        metadata: entry.metadata,
+        versions: Array.from(entry.versions.entries()).map(([version, info]) => ({
+          version,
+          deprecated: info.deprecated,
+          deprecationMessage: info.deprecationMessage,
+          registeredAt: info.registeredAt.toISOString()
+        }))
       };
     }
 
-    return this.compareSchemas(oldSchema.schema, newSchema.schema);
+    return {
+      immutable: this.immutable,
+      schemaCount: this.schemas.size,
+      schemas
+    };
+  }
+
+  /**
+   * Validate version format (semantic versioning)
+   */
+  private validateVersion(version: string): void {
+    const versionRegex = /^\d+\.\d+\.\d+(-[a-zA-Z0-9.-]+)?(\+[a-zA-Z0-9.-]+)?$/;
+    
+    if (!versionRegex.test(version)) {
+      throw new SDKError(
+        ErrorCode.INVALID_SCHEMA,
+        `Invalid version format: ${version}. Expected semantic versioning (e.g., 1.0.0)`
+      );
+    }
   }
 
   /**
    * Compare two schemas for compatibility
    */
   private compareSchemas(
-    oldSchema: JSONSchema,
-    newSchema: JSONSchema,
-    path: string = ''
+    fromSchema: JSONSchema,
+    toSchema: JSONSchema
   ): CompatibilityResult {
-    const breakingChanges: BreakingChange[] = [];
-    const warnings: string[] = [];
+    const issues: string[] = [];
+    const breakingChanges: string[] = [];
 
     // Check type changes
-    if (oldSchema.type !== newSchema.type) {
-      breakingChanges.push({
-        type: 'changed_type',
-        path,
-        description: `Type changed from ${oldSchema.type} to ${newSchema.type}`,
-        oldValue: oldSchema.type,
-        newValue: newSchema.type
-      });
+    if (fromSchema.type !== toSchema.type) {
+      breakingChanges.push(
+        `Type changed from ${fromSchema.type} to ${toSchema.type}`
+      );
     }
 
-    // Check required fields (object schemas)
-    if (oldSchema.type === 'object' && newSchema.type === 'object') {
-      const oldRequired = new Set(oldSchema.required || []);
-      const newRequired = new Set(newSchema.required || []);
+    // Check required properties (for objects)
+    if (fromSchema.type === 'object' && toSchema.type === 'object') {
+      const fromRequired = new Set(fromSchema.required || []);
+      const toRequired = new Set(toSchema.required || []);
 
-      // New required fields are breaking
-      for (const field of newRequired) {
-        if (!oldRequired.has(field)) {
-          breakingChanges.push({
-            type: 'added_required',
-            path: path ? `${path}.${field}` : field,
-            description: `New required field: ${field}`
-          });
+      // New required properties are breaking changes
+      for (const prop of toRequired) {
+        if (!fromRequired.has(prop)) {
+          breakingChanges.push(`New required property: ${prop}`);
         }
       }
 
-      // Removed fields are breaking
-      const oldProps = new Set(Object.keys(oldSchema.properties || {}));
-      const newProps = new Set(Object.keys(newSchema.properties || {}));
+      // Removed properties are breaking changes
+      const fromProps = new Set(Object.keys(fromSchema.properties || {}));
+      const toProps = new Set(Object.keys(toSchema.properties || {}));
 
-      for (const field of oldProps) {
-        if (!newProps.has(field)) {
-          breakingChanges.push({
-            type: 'removed_field',
-            path: path ? `${path}.${field}` : field,
-            description: `Removed field: ${field}`
-          });
-        }
-      }
-
-      // Check nested properties
-      if (oldSchema.properties && newSchema.properties) {
-        for (const [key, oldProp] of Object.entries(oldSchema.properties)) {
-          const newProp = newSchema.properties[key];
-          if (newProp) {
-            const propPath = path ? `${path}.${key}` : key;
-            const result = this.compareSchemas(oldProp, newProp, propPath);
-            breakingChanges.push(...result.breakingChanges || []);
-            warnings.push(...result.warnings || []);
-          }
+      for (const prop of fromProps) {
+        if (!toProps.has(prop)) {
+          breakingChanges.push(`Removed property: ${prop}`);
         }
       }
     }
 
     // Check enum values
-    if (oldSchema.enum && newSchema.enum) {
-      const oldEnums = new Set(oldSchema.enum);
-      const newEnums = new Set(newSchema.enum);
+    if (fromSchema.enum && toSchema.enum) {
+      const fromEnum = new Set(fromSchema.enum);
+      const toEnum = new Set(toSchema.enum);
 
-      for (const value of oldEnums) {
-        if (!newEnums.has(value)) {
-          breakingChanges.push({
-            type: 'removed_enum_value',
-            path,
-            description: `Removed enum value: ${value}`,
-            oldValue: value
-          });
+      for (const value of fromEnum) {
+        if (!toEnum.has(value)) {
+          breakingChanges.push(`Removed enum value: ${value}`);
         }
       }
     }
 
-    // Check constraints (warnings for relaxed constraints)
-    if (oldSchema.minLength !== undefined && newSchema.minLength !== undefined) {
-      if (newSchema.minLength > oldSchema.minLength) {
-        warnings.push(`Stricter minLength at ${path}: ${oldSchema.minLength} -> ${newSchema.minLength}`);
-      }
-    }
-
-    if (oldSchema.maxLength !== undefined && newSchema.maxLength !== undefined) {
-      if (newSchema.maxLength < oldSchema.maxLength) {
-        warnings.push(`Stricter maxLength at ${path}: ${oldSchema.maxLength} -> ${newSchema.maxLength}`);
-      }
-    }
+    const compatible = breakingChanges.length === 0;
 
     return {
-      compatible: breakingChanges.length === 0,
-      breakingChanges: breakingChanges.length > 0 ? breakingChanges : undefined,
-      warnings: warnings.length > 0 ? warnings : undefined
+      compatible,
+      issues: issues.length > 0 ? issues : undefined,
+      breakingChanges: breakingChanges.length > 0 ? breakingChanges : undefined
     };
-  }
-
-  /**
-   * Compare version strings (semver)
-   */
-  private compareVersions(v1: string, v2: string): number {
-    const parts1 = v1.split('.').map(Number);
-    const parts2 = v2.split('.').map(Number);
-
-    for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
-      const p1 = parts1[i] || 0;
-      const p2 = parts2[i] || 0;
-
-      if (p1 > p2) return 1;
-      if (p1 < p2) return -1;
-    }
-
-    return 0;
-  }
-
-  /**
-   * Get deprecated schemas
-   */
-  getDeprecated(): VersionedSchema[] {
-    const deprecated: VersionedSchema[] = [];
-
-    for (const entry of this.schemas.values()) {
-      for (const schema of entry.versions.values()) {
-        if (schema.deprecated) {
-          deprecated.push(schema);
-        }
-      }
-    }
-
-    return deprecated;
-  }
-
-  /**
-   * Mark schema as deprecated
-   */
-  deprecate(id: string, version: string, message?: string, replacedBy?: string): void {
-    const schema = this.get(id, version);
-    if (!schema) {
-      throw new Error(`Schema ${id} version ${version} not found`);
-    }
-
-    schema.deprecated = true;
-    schema.deprecationMessage = message;
-    schema.replacedBy = replacedBy;
-  }
-
-  /**
-   * Export registry to JSON
-   */
-  toJSON(): any {
-    const result: any = {};
-
-    for (const [id, entry] of this.schemas.entries()) {
-      result[id] = {
-        latestVersion: entry.latestVersion,
-        versions: Array.from(entry.versions.entries()).map(([version, schema]) => ({
-          version,
-          metadata: schema.metadata,
-          deprecated: schema.deprecated,
-          deprecationMessage: schema.deprecationMessage,
-          replacedBy: schema.replacedBy
-        }))
-      };
-    }
-
-    return result;
-  }
-
-  /**
-   * Clear registry
-   */
-  clear(): void {
-    this.schemas.clear();
-    this.schemasByHash.clear();
-  }
-
-  /**
-   * Get registry size
-   */
-  size(): number {
-    return this.schemas.size;
-  }
-
-  /**
-   * Get total version count
-   */
-  versionCount(): number {
-    let count = 0;
-    for (const entry of this.schemas.values()) {
-      count += entry.versions.size;
-    }
-    return count;
   }
 }

@@ -2,567 +2,477 @@
  * Schema Validation Engine
  * 
  * Implements core schema validation logic, supporting both static and dynamic
- * validation of tool inputs and outputs.
+ * validation of tool inputs and outputs using JSON Schema.
  */
 
-import {
-  JSONSchema,
-  ValidationResult,
-  ValidationError,
-  ValidationWarning,
-  FormatValidator,
-  CustomValidator,
-  SchemaUtils
-} from './types';
+import Ajv, { ValidateFunction, ErrorObject } from 'ajv';
+import addFormats from 'ajv-formats';
+import { JSONSchema } from '../core/tool';
+import { ValidationError, ErrorCode } from '../core/errors';
+import { Logger } from '../observability/logger';
 
 /**
- * Validation options
+ * Validation result
  */
-export interface ValidationOptions {
-  /** Strict mode (fail on warnings) */
-  strict?: boolean;
-  /** Allow additional properties */
-  allowAdditional?: boolean;
-  /** Coerce types */
-  coerceTypes?: boolean;
-  /** Remove additional properties */
-  removeAdditional?: boolean;
-  /** Custom format validators */
-  formats?: Record<string, FormatValidator>;
-  /** Custom validators */
-  customValidators?: CustomValidator[];
+export interface ValidationResult {
+  /** Whether validation passed */
+  valid: boolean;
+  
+  /** Validation errors if any */
+  errors?: ValidationErrorDetail[];
+  
+  /** Validated data (may be coerced) */
+  data?: any;
 }
 
 /**
- * Schema Validator class
+ * Detailed validation error
+ */
+export interface ValidationErrorDetail {
+  /** Error path in the data */
+  path: string;
+  
+  /** Error message */
+  message: string;
+  
+  /** Error keyword (e.g., 'required', 'type') */
+  keyword: string;
+  
+  /** Schema path */
+  schemaPath: string;
+  
+  /** Additional error parameters */
+  params?: Record<string, any>;
+}
+
+/**
+ * Validator options
+ */
+export interface ValidatorOptions {
+  /** Allow additional properties not in schema */
+  allowAdditionalProperties?: boolean;
+  
+  /** Coerce types (e.g., string to number) */
+  coerceTypes?: boolean;
+  
+  /** Remove additional properties */
+  removeAdditional?: boolean | 'all' | 'failing';
+  
+  /** Use defaults from schema */
+  useDefaults?: boolean;
+  
+  /** Strict mode */
+  strict?: boolean;
+}
+
+/**
+ * Schema Validator Class
+ * 
+ * Responsibilities:
+ * - Validate data against JSON Schema definitions
+ * - Support both synchronous and asynchronous validation
+ * - Provide clear error messages and validation reports
+ * - Cache compiled schemas for performance
  */
 export class SchemaValidator {
-  private formatValidators: Map<string, FormatValidator>;
-  private customValidators: CustomValidator[];
-  private schemaCache: Map<string, any>;
+  private ajv: Ajv;
+  private logger: Logger;
+  private compiledSchemas: Map<string, ValidateFunction> = new Map();
 
-  constructor() {
-    this.formatValidators = new Map();
-    this.customValidators = [];
-    this.schemaCache = new Map();
+  constructor(logger: Logger, options: ValidatorOptions = {}) {
+    this.logger = logger;
     
-    // Register default format validators
-    this.registerDefaultFormats();
+    // Initialize Ajv with options
+    this.ajv = new Ajv({
+      allErrors: true,
+      verbose: true,
+      strict: options.strict !== false,
+      coerceTypes: options.coerceTypes || false,
+      useDefaults: options.useDefaults !== false,
+      removeAdditional: options.removeAdditional || false,
+      allowUnionTypes: true
+    });
+
+    // Add format validators
+    addFormats(this.ajv);
+
+    // Add custom formats if needed
+    this.addCustomFormats();
   }
 
   /**
-   * Register default format validators
-   */
-  private registerDefaultFormats(): void {
-    // Email format
-    this.formatValidators.set('email', (value: string) => {
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      return emailRegex.test(value);
-    });
-
-    // URI format
-    this.formatValidators.set('uri', (value: string) => {
-      try {
-        new URL(value);
-        return true;
-      } catch {
-        return false;
-      }
-    });
-
-    // Date-time format (ISO 8601)
-    this.formatValidators.set('date-time', (value: string) => {
-      const date = new Date(value);
-      return !isNaN(date.getTime()) && value === date.toISOString();
-    });
-
-    // UUID format
-    this.formatValidators.set('uuid', (value: string) => {
-      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-      return uuidRegex.test(value);
-    });
-
-    // IPv4 format
-    this.formatValidators.set('ipv4', (value: string) => {
-      const ipv4Regex = /^(\d{1,3}\.){3}\d{1,3}$/;
-      if (!ipv4Regex.test(value)) return false;
-      return value.split('.').every(part => {
-        const num = parseInt(part, 10);
-        return num >= 0 && num <= 255;
-      });
-    });
-  }
-
-  /**
-   * Register a custom format validator
-   */
-  registerFormat(name: string, validator: FormatValidator): void {
-    this.formatValidators.set(name, validator);
-  }
-
-  /**
-   * Register a custom validator
-   */
-  registerCustomValidator(validator: CustomValidator): void {
-    this.customValidators.push(validator);
-  }
-
-  /**
-   * Validate data against schema
+   * Validate data against a schema
+   * @param data Data to validate
+   * @param schema JSON Schema
+   * @param options Validation options
+   * @returns Validation result
    */
   async validate(
     data: any,
     schema: JSONSchema,
-    options: ValidationOptions = {}
+    options?: ValidatorOptions
   ): Promise<ValidationResult> {
-    const errors: ValidationError[] = [];
-    const warnings: ValidationWarning[] = [];
-
     try {
-      // Validate schema structure
-      this.validateValue(data, schema, '', errors, options);
+      // Get or compile schema
+      const schemaKey = this.getSchemaKey(schema);
+      let validateFn = this.compiledSchemas.get(schemaKey);
 
-      // Run custom validators
-      for (const customValidator of this.customValidators) {
-        const result = customValidator(data, schema);
-        if (!result.valid && result.errors) {
-          errors.push(...result.errors);
-        }
-        if (result.warnings) {
-          warnings.push(...result.warnings);
-        }
+      if (!validateFn) {
+        validateFn = this.ajv.compile(schema);
+        this.compiledSchemas.set(schemaKey, validateFn);
+        this.logger.debug('Schema compiled and cached', { schemaKey });
       }
 
-      // Check strict mode
-      if (options.strict && warnings.length > 0) {
-        warnings.forEach(w => {
-          errors.push({
-            path: w.path,
-            message: w.message,
-            keyword: 'warning'
-          });
-        });
+      // Clone data to avoid mutation
+      const dataToValidate = JSON.parse(JSON.stringify(data));
+
+      // Validate
+      const valid = validateFn(dataToValidate);
+
+      if (valid) {
+        return {
+          valid: true,
+          data: dataToValidate
+        };
       }
 
-      return {
-        valid: errors.length === 0,
-        errors: errors.length > 0 ? errors : undefined,
-        warnings: warnings.length > 0 ? warnings : undefined
-      };
+      // Format errors
+      const errors = this.formatErrors(validateFn.errors || []);
 
-    } catch (error: any) {
+      this.logger.debug('Validation failed', {
+        schemaKey,
+        errorCount: errors.length,
+        errors
+      });
+
       return {
         valid: false,
-        errors: [{
-          path: '',
-          message: `Validation error: ${error.message}`,
-          keyword: 'exception'
-        }]
+        errors,
+        data: dataToValidate
       };
+
+    } catch (error) {
+      this.logger.error('Validation error', error);
+      
+      throw new ValidationError(
+        'Schema validation failed',
+        [{
+          path: '',
+          message: error.message,
+          keyword: 'error',
+          schemaPath: ''
+        }]
+      );
     }
   }
 
   /**
-   * Validate a value against schema
+   * Validate and throw on error
+   * @param data Data to validate
+   * @param schema JSON Schema
+   * @param options Validation options
+   * @returns Validated data
+   * @throws ValidationError if validation fails
    */
-  private validateValue(
-    value: any,
+  async validateOrThrow(
+    data: any,
     schema: JSONSchema,
-    path: string,
-    errors: ValidationError[],
-    options: ValidationOptions
-  ): void {
-    // Handle $ref
-    if (schema.$ref) {
-      // In a real implementation, this would resolve the reference
-      return;
+    options?: ValidatorOptions
+  ): Promise<any> {
+    const result = await this.validate(data, schema, options);
+
+    if (!result.valid) {
+      throw new ValidationError(
+        'Validation failed',
+        result.errors || []
+      );
     }
 
-    // Type validation
-    if (schema.type) {
-      if (!this.validateType(value, schema.type, options.coerceTypes)) {
-        errors.push({
-          path,
-          message: `Expected type ${schema.type}, got ${typeof value}`,
-          keyword: 'type',
-          params: { type: schema.type, actualType: typeof value }
-        });
-        return;
-      }
-    }
-
-    // Const validation
-    if (schema.const !== undefined && value !== schema.const) {
-      errors.push({
-        path,
-        message: `Value must be ${JSON.stringify(schema.const)}`,
-        keyword: 'const',
-        params: { allowedValue: schema.const }
-      });
-    }
-
-    // Enum validation
-    if (schema.enum && !schema.enum.includes(value)) {
-      errors.push({
-        path,
-        message: `Value must be one of: ${schema.enum.join(', ')}`,
-        keyword: 'enum',
-        params: { allowedValues: schema.enum }
-      });
-    }
-
-    // Type-specific validations
-    if (typeof value === 'string') {
-      this.validateString(value, schema, path, errors);
-    } else if (typeof value === 'number') {
-      this.validateNumber(value, schema, path, errors);
-    } else if (Array.isArray(value)) {
-      this.validateArray(value, schema, path, errors, options);
-    } else if (typeof value === 'object' && value !== null) {
-      this.validateObject(value, schema, path, errors, options);
-    }
-
-    // Combined schemas
-    if (schema.allOf) {
-      schema.allOf.forEach(subSchema => {
-        this.validateValue(value, subSchema, path, errors, options);
-      });
-    }
-
-    if (schema.anyOf) {
-      const anyOfErrors: ValidationError[] = [];
-      const valid = schema.anyOf.some(subSchema => {
-        const tempErrors: ValidationError[] = [];
-        this.validateValue(value, subSchema, path, tempErrors, options);
-        if (tempErrors.length > 0) {
-          anyOfErrors.push(...tempErrors);
-        }
-        return tempErrors.length === 0;
-      });
-
-      if (!valid) {
-        errors.push({
-          path,
-          message: 'Value does not match any of the schemas',
-          keyword: 'anyOf',
-          params: { errors: anyOfErrors }
-        });
-      }
-    }
-
-    if (schema.oneOf) {
-      const matches = schema.oneOf.filter(subSchema => {
-        const tempErrors: ValidationError[] = [];
-        this.validateValue(value, subSchema, path, tempErrors, options);
-        return tempErrors.length === 0;
-      });
-
-      if (matches.length !== 1) {
-        errors.push({
-          path,
-          message: `Value must match exactly one schema, but matched ${matches.length}`,
-          keyword: 'oneOf',
-          params: { matches: matches.length }
-        });
-      }
-    }
-
-    if (schema.not) {
-      const tempErrors: ValidationError[] = [];
-      this.validateValue(value, schema.not, path, tempErrors, options);
-      if (tempErrors.length === 0) {
-        errors.push({
-          path,
-          message: 'Value must not match the schema',
-          keyword: 'not'
-        });
-      }
-    }
+    return result.data;
   }
 
   /**
-   * Validate type
+   * Validate synchronously
+   * @param data Data to validate
+   * @param schema JSON Schema
+   * @returns Validation result
    */
-  private validateType(value: any, type: string | string[], coerce?: boolean): boolean {
-    const types = Array.isArray(type) ? type : [type];
-    const actualType = Array.isArray(value) ? 'array' : value === null ? 'null' : typeof value;
+  validateSync(data: any, schema: JSONSchema): ValidationResult {
+    try {
+      const schemaKey = this.getSchemaKey(schema);
+      let validateFn = this.compiledSchemas.get(schemaKey);
 
-    return types.some(t => {
-      if (t === actualType) return true;
-      if (t === 'integer' && typeof value === 'number' && Number.isInteger(value)) return true;
-      if (coerce) {
-        // Type coercion logic could be added here
+      if (!validateFn) {
+        validateFn = this.ajv.compile(schema);
+        this.compiledSchemas.set(schemaKey, validateFn);
       }
-      return false;
-    });
+
+      const dataToValidate = JSON.parse(JSON.stringify(data));
+      const valid = validateFn(dataToValidate);
+
+      if (valid) {
+        return { valid: true, data: dataToValidate };
+      }
+
+      return {
+        valid: false,
+        errors: this.formatErrors(validateFn.errors || []),
+        data: dataToValidate
+      };
+
+    } catch (error) {
+      throw new ValidationError(
+        'Schema validation failed',
+        [{
+          path: '',
+          message: error.message,
+          keyword: 'error',
+          schemaPath: ''
+        }]
+      );
+    }
   }
 
   /**
-   * Validate string
+   * Add a schema to the validator
+   * @param schemaId Schema ID
+   * @param schema JSON Schema
    */
-  private validateString(
-    value: string,
-    schema: JSONSchema,
-    path: string,
-    errors: ValidationError[]
-  ): void {
-    if (schema.minLength !== undefined && value.length < schema.minLength) {
-      errors.push({
-        path,
-        message: `String length must be >= ${schema.minLength}`,
-        keyword: 'minLength',
-        params: { limit: schema.minLength }
-      });
-    }
-
-    if (schema.maxLength !== undefined && value.length > schema.maxLength) {
-      errors.push({
-        path,
-        message: `String length must be <= ${schema.maxLength}`,
-        keyword: 'maxLength',
-        params: { limit: schema.maxLength }
-      });
-    }
-
-    if (schema.pattern) {
-      const regex = new RegExp(schema.pattern);
-      if (!regex.test(value)) {
-        errors.push({
-          path,
-          message: `String does not match pattern: ${schema.pattern}`,
-          keyword: 'pattern',
-          params: { pattern: schema.pattern }
-        });
-      }
-    }
-
-    if (schema.format) {
-      const validator = this.formatValidators.get(schema.format);
-      if (validator && !validator(value)) {
-        errors.push({
-          path,
-          message: `String does not match format: ${schema.format}`,
-          keyword: 'format',
-          params: { format: schema.format }
-        });
-      }
+  addSchema(schemaId: string, schema: JSONSchema): void {
+    try {
+      this.ajv.addSchema(schema, schemaId);
+      this.logger.debug('Schema added', { schemaId });
+    } catch (error) {
+      this.logger.error('Failed to add schema', error);
+      throw error;
     }
   }
 
   /**
-   * Validate number
+   * Remove a schema from the validator
+   * @param schemaId Schema ID
    */
-  private validateNumber(
-    value: number,
-    schema: JSONSchema,
-    path: string,
-    errors: ValidationError[]
-  ): void {
-    if (schema.minimum !== undefined && value < schema.minimum) {
-      errors.push({
-        path,
-        message: `Number must be >= ${schema.minimum}`,
-        keyword: 'minimum',
-        params: { limit: schema.minimum }
-      });
-    }
-
-    if (schema.maximum !== undefined && value > schema.maximum) {
-      errors.push({
-        path,
-        message: `Number must be <= ${schema.maximum}`,
-        keyword: 'maximum',
-        params: { limit: schema.maximum }
-      });
-    }
-
-    if (schema.exclusiveMinimum !== undefined && value <= schema.exclusiveMinimum) {
-      errors.push({
-        path,
-        message: `Number must be > ${schema.exclusiveMinimum}`,
-        keyword: 'exclusiveMinimum',
-        params: { limit: schema.exclusiveMinimum }
-      });
-    }
-
-    if (schema.exclusiveMaximum !== undefined && value >= schema.exclusiveMaximum) {
-      errors.push({
-        path,
-        message: `Number must be < ${schema.exclusiveMaximum}`,
-        keyword: 'exclusiveMaximum',
-        params: { limit: schema.exclusiveMaximum }
-      });
-    }
-
-    if (schema.multipleOf !== undefined && value % schema.multipleOf !== 0) {
-      errors.push({
-        path,
-        message: `Number must be multiple of ${schema.multipleOf}`,
-        keyword: 'multipleOf',
-        params: { multipleOf: schema.multipleOf }
-      });
-    }
+  removeSchema(schemaId: string): void {
+    this.ajv.removeSchema(schemaId);
+    this.compiledSchemas.delete(schemaId);
+    this.logger.debug('Schema removed', { schemaId });
   }
 
   /**
-   * Validate array
-   */
-  private validateArray(
-    value: any[],
-    schema: JSONSchema,
-    path: string,
-    errors: ValidationError[],
-    options: ValidationOptions
-  ): void {
-    if (schema.minItems !== undefined && value.length < schema.minItems) {
-      errors.push({
-        path,
-        message: `Array must have at least ${schema.minItems} items`,
-        keyword: 'minItems',
-        params: { limit: schema.minItems }
-      });
-    }
-
-    if (schema.maxItems !== undefined && value.length > schema.maxItems) {
-      errors.push({
-        path,
-        message: `Array must have at most ${schema.maxItems} items`,
-        keyword: 'maxItems',
-        params: { limit: schema.maxItems }
-      });
-    }
-
-    if (schema.uniqueItems) {
-      const seen = new Set();
-      const duplicates: number[] = [];
-      value.forEach((item, index) => {
-        const key = JSON.stringify(item);
-        if (seen.has(key)) {
-          duplicates.push(index);
-        }
-        seen.add(key);
-      });
-
-      if (duplicates.length > 0) {
-        errors.push({
-          path,
-          message: 'Array items must be unique',
-          keyword: 'uniqueItems',
-          params: { duplicateIndices: duplicates }
-        });
-      }
-    }
-
-    if (schema.items) {
-      if (Array.isArray(schema.items)) {
-        // Tuple validation
-        value.forEach((item, index) => {
-          if (index < schema.items!.length) {
-            this.validateValue(
-              item,
-              (schema.items as JSONSchema[])[index],
-              `${path}[${index}]`,
-              errors,
-              options
-            );
-          }
-        });
-      } else {
-        // All items must match schema
-        value.forEach((item, index) => {
-          this.validateValue(
-            item,
-            schema.items as JSONSchema,
-            `${path}[${index}]`,
-            errors,
-            options
-          );
-        });
-      }
-    }
-  }
-
-  /**
-   * Validate object
-   */
-  private validateObject(
-    value: Record<string, any>,
-    schema: JSONSchema,
-    path: string,
-    errors: ValidationError[],
-    options: ValidationOptions
-  ): void {
-    // Required properties
-    if (schema.required) {
-      schema.required.forEach(prop => {
-        if (!(prop in value)) {
-          errors.push({
-            path: path ? `${path}.${prop}` : prop,
-            message: `Missing required property: ${prop}`,
-            keyword: 'required',
-            params: { missingProperty: prop }
-          });
-        }
-      });
-    }
-
-    // Property count
-    const propCount = Object.keys(value).length;
-    if (schema.minProperties !== undefined && propCount < schema.minProperties) {
-      errors.push({
-        path,
-        message: `Object must have at least ${schema.minProperties} properties`,
-        keyword: 'minProperties',
-        params: { limit: schema.minProperties }
-      });
-    }
-
-    if (schema.maxProperties !== undefined && propCount > schema.maxProperties) {
-      errors.push({
-        path,
-        message: `Object must have at most ${schema.maxProperties} properties`,
-        keyword: 'maxProperties',
-        params: { limit: schema.maxProperties }
-      });
-    }
-
-    // Validate properties
-    if (schema.properties) {
-      Object.keys(value).forEach(key => {
-        const propPath = path ? `${path}.${key}` : key;
-        
-        if (schema.properties![key]) {
-          this.validateValue(
-            value[key],
-            schema.properties![key],
-            propPath,
-            errors,
-            options
-          );
-        } else if (schema.additionalProperties === false && !options.allowAdditional) {
-          errors.push({
-            path: propPath,
-            message: `Additional property not allowed: ${key}`,
-            keyword: 'additionalProperties',
-            params: { additionalProperty: key }
-          });
-        } else if (typeof schema.additionalProperties === 'object') {
-          this.validateValue(
-            value[key],
-            schema.additionalProperties,
-            propPath,
-            errors,
-            options
-          );
-        }
-      });
-    }
-  }
-
-  /**
-   * Clear schema cache
+   * Clear all cached schemas
    */
   clearCache(): void {
-    this.schemaCache.clear();
+    this.compiledSchemas.clear();
+    this.logger.debug('Schema cache cleared');
+  }
+
+  /**
+   * Get cache statistics
+   */
+  getCacheStats(): {
+    size: number;
+    schemas: string[];
+  } {
+    return {
+      size: this.compiledSchemas.size,
+      schemas: Array.from(this.compiledSchemas.keys())
+    };
+  }
+
+  /**
+   * Format Ajv errors into our error format
+   */
+  private formatErrors(ajvErrors: ErrorObject[]): ValidationErrorDetail[] {
+    return ajvErrors.map(error => ({
+      path: error.instancePath || error.dataPath || '/',
+      message: error.message || 'Validation failed',
+      keyword: error.keyword,
+      schemaPath: error.schemaPath,
+      params: error.params
+    }));
+  }
+
+  /**
+   * Generate a cache key for a schema
+   */
+  private getSchemaKey(schema: JSONSchema): string {
+    // Use schema $id if available, otherwise generate hash
+    if (schema.$id) {
+      return schema.$id;
+    }
+
+    // Simple hash based on stringified schema
+    const schemaStr = JSON.stringify(schema);
+    let hash = 0;
+    for (let i = 0; i < schemaStr.length; i++) {
+      const char = schemaStr.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32-bit integer
+    }
+    return `schema_${hash}`;
+  }
+
+  /**
+   * Add custom format validators
+   */
+  private addCustomFormats(): void {
+    // Add custom formats here if needed
+    
+    // Example: GitHub repository format
+    this.ajv.addFormat('github-repo', {
+      type: 'string',
+      validate: (data: string) => {
+        return /^[a-zA-Z0-9_-]+\/[a-zA-Z0-9_-]+$/.test(data);
+      }
+    });
+
+    // Example: Semantic version format
+    this.ajv.addFormat('semver', {
+      type: 'string',
+      validate: (data: string) => {
+        return /^\d+\.\d+\.\d+(-[a-zA-Z0-9.-]+)?(\+[a-zA-Z0-9.-]+)?$/.test(data);
+      }
+    });
+
+    // Example: ISO 8601 duration format
+    this.ajv.addFormat('duration', {
+      type: 'string',
+      validate: (data: string) => {
+        return /^P(?:\d+Y)?(?:\d+M)?(?:\d+D)?(?:T(?:\d+H)?(?:\d+M)?(?:\d+(?:\.\d+)?S)?)?$/.test(data);
+      }
+    });
+
+    this.logger.debug('Custom formats added');
+  }
+}
+
+/**
+ * Schema validation utilities
+ */
+export class SchemaUtils {
+  /**
+   * Merge two schemas
+   */
+  static mergeSchemas(base: JSONSchema, override: JSONSchema): JSONSchema {
+    return {
+      ...base,
+      ...override,
+      properties: {
+        ...base.properties,
+        ...override.properties
+      },
+      required: [
+        ...(base.required || []),
+        ...(override.required || [])
+      ].filter((v, i, a) => a.indexOf(v) === i) // Remove duplicates
+    };
+  }
+
+  /**
+   * Create a schema for an object with specific properties
+   */
+  static createObjectSchema(
+    properties: Record<string, JSONSchema>,
+    required?: string[],
+    options?: {
+      additionalProperties?: boolean;
+      description?: string;
+    }
+  ): JSONSchema {
+    return {
+      type: 'object',
+      properties,
+      required: required || [],
+      additionalProperties: options?.additionalProperties !== false,
+      description: options?.description
+    };
+  }
+
+  /**
+   * Create a schema for an array
+   */
+  static createArraySchema(
+    items: JSONSchema,
+    options?: {
+      minItems?: number;
+      maxItems?: number;
+      uniqueItems?: boolean;
+      description?: string;
+    }
+  ): JSONSchema {
+    return {
+      type: 'array',
+      items,
+      minItems: options?.minItems,
+      maxItems: options?.maxItems,
+      uniqueItems: options?.uniqueItems,
+      description: options?.description
+    };
+  }
+
+  /**
+   * Create a schema for a string with constraints
+   */
+  static createStringSchema(options?: {
+    minLength?: number;
+    maxLength?: number;
+    pattern?: string;
+    format?: string;
+    enum?: string[];
+    description?: string;
+  }): JSONSchema {
+    return {
+      type: 'string',
+      minLength: options?.minLength,
+      maxLength: options?.maxLength,
+      pattern: options?.pattern,
+      format: options?.format,
+      enum: options?.enum,
+      description: options?.description
+    };
+  }
+
+  /**
+   * Create a schema for a number with constraints
+   */
+  static createNumberSchema(options?: {
+    minimum?: number;
+    maximum?: number;
+    multipleOf?: number;
+    description?: string;
+  }): JSONSchema {
+    return {
+      type: 'number',
+      minimum: options?.minimum,
+      maximum: options?.maximum,
+      multipleOf: options?.multipleOf,
+      description: options?.description
+    };
+  }
+
+  /**
+   * Create a schema for an enum
+   */
+  static createEnumSchema(
+    values: any[],
+    description?: string
+  ): JSONSchema {
+    return {
+      enum: values,
+      description
+    };
+  }
+
+  /**
+   * Create a union schema (oneOf)
+   */
+  static createUnionSchema(
+    schemas: JSONSchema[],
+    description?: string
+  ): JSONSchema {
+    return {
+      oneOf: schemas,
+      description
+    };
   }
 }

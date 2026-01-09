@@ -1,95 +1,200 @@
 /**
- * namespace-sdk - Main SDK Entrypoint
+ * namespace-sdk - Main Entry Point
  * 
- * A machine-native, auditable platform integration layer for MCP tool wrapping.
- * Provides standardized interfaces for external APIs (GitHub, Cloudflare, OpenAI, Google, etc.)
- * with built-in schema validation, credential management, and audit trails.
- * 
- * @module namespace-sdk
+ * A Machine-Native, Auditable Platform Integration Layer for MCP Tool Wrapping
  */
 
-import { SDK } from './core/sdk';
-import { ToolRegistry } from './core/registry';
-import { CredentialManager } from './credentials/manager';
-import { SchemaValidator } from './schema/validator';
-import { Logger } from './observability/logger';
-import { ConfigManager } from './config';
+// Core exports
+export { NamespaceSDK, SDKConfig, SDKState } from './core/sdk';
+export { ToolRegistry, ToolRegistrationOptions, ToolQueryFilter } from './core/registry';
+export {
+  Tool,
+  ToolMetadata,
+  ToolContext,
+  ToolInvocationResult,
+  JSONSchema,
+  CredentialRequirement,
+  SimpleTool,
+  ToolBuilder,
+  createTool
+} from './core/tool';
+export {
+  SDKError,
+  ErrorCode,
+  ErrorSeverity,
+  ToolExecutionError,
+  ValidationError,
+  CredentialError,
+  NetworkError,
+  RateLimitError,
+  TimeoutError,
+  PluginError,
+  ConfigError,
+  ErrorHandler,
+  createError,
+  assert
+} from './core/errors';
 
-export { SDK, ToolRegistry, CredentialManager, SchemaValidator, Logger, ConfigManager };
+// Schema exports
+export {
+  SchemaValidator,
+  ValidationResult,
+  ValidationErrorDetail,
+  ValidatorOptions,
+  SchemaUtils
+} from './schema/validator';
+export {
+  SchemaType,
+  SchemaFormat,
+  PropertySchema,
+  ObjectSchema,
+  ArraySchema,
+  StringSchema,
+  NumberSchema,
+  BooleanSchema,
+  UnionSchema,
+  SchemaMetadata,
+  CompleteSchema,
+  SchemaBuilder,
+  CommonSchemas,
+  createSchema,
+  isObjectSchema,
+  isArraySchema,
+  isStringSchema,
+  isNumberSchema
+} from './schema/types';
+export {
+  SchemaRegistry,
+  SchemaVersion,
+  CompatibilityResult
+} from './schema/registry';
 
-// Export types
-export * from './core/tool';
-export * from './core/errors';
-export * from './schema/types';
-export * from './credentials/types';
+// Credential exports
+export { CredentialManager, CredentialManagerOptions } from './credentials/manager';
+export {
+  Credential,
+  CredentialType,
+  CredentialConfig,
+  CredentialProvider,
+  OAuthCredential,
+  ApiKeyCredential,
+  BasicAuthCredential,
+  SshKeyCredential,
+  CertificateCredential,
+  ServiceAccountCredential,
+  ProviderConfig,
+  EnvProviderConfig,
+  FileProviderConfig,
+  VaultProviderConfig,
+  CloudProviderConfig,
+  RotationPolicy,
+  CredentialUsage,
+  CredentialValidation,
+  SecurityOptions,
+  isOAuthCredential,
+  isApiKeyCredential,
+  isBasicAuthCredential,
+  isSshKeyCredential,
+  isCertificateCredential,
+  isServiceAccountCredential
+} from './credentials/types';
+export { EnvCredentialProvider, EnvProviderOptions } from './credentials/providers/env';
+export { FileCredentialProvider, FileProviderOptions } from './credentials/providers/file';
+export { VaultCredentialProvider, VaultProviderOptions } from './credentials/providers/vault';
+export { CloudCredentialProvider, CloudProviderOptions, CloudProviderType } from './credentials/providers/cloud';
+
+// Observability exports
+export {
+  Logger,
+  LogLevel,
+  LogEntry,
+  LoggerOptions,
+  createLogger
+} from './observability/logger';
+export {
+  Tracer,
+  Span,
+  SpanStatus,
+  SpanAttributes,
+  SpanEvent,
+  TracerOptions,
+  createTracer
+} from './observability/tracer';
+export {
+  MetricsCollector,
+  MetricType,
+  MetricLabels,
+  MetricValue,
+  HistogramBucket,
+  HistogramData,
+  MetricsCollectorOptions,
+  createMetricsCollector
+} from './observability/metrics';
+export {
+  AuditLogger,
+  AuditEvent,
+  AuditLoggerOptions,
+  createAuditLogger
+} from './observability/audit';
+
+// Configuration exports
+export {
+  ConfigManager,
+  SDKConfig as ConfigSDKConfig,
+  ConfigSource,
+  ConfigManagerOptions,
+  createConfigManager
+} from './config';
+
+// Plugin exports
+export {
+  PluginLoader,
+  Plugin,
+  PluginMetadata,
+  PluginContext,
+  PluginLoaderOptions,
+  createPluginLoader
+} from './plugins';
+
+// Version
+export const VERSION = '1.0.0';
 
 /**
- * SDK Configuration Options
- */
-export interface SDKConfig {
-  /** Environment (development, staging, production) */
-  environment?: string;
-  /** Configuration file path */
-  configPath?: string;
-  /** Enable debug logging */
-  debug?: boolean;
-  /** Custom credential providers */
-  credentialProviders?: any[];
-  /** Plugin directories */
-  pluginDirs?: string[];
-  /** Observability settings */
-  observability?: {
-    logging?: boolean;
-    tracing?: boolean;
-    metrics?: boolean;
-    audit?: boolean;
-  };
-}
-
-/**
- * Initialize the SDK with configuration
+ * Create and initialize a new SDK instance
  * 
- * @param config - SDK configuration options
+ * @param config SDK configuration
  * @returns Initialized SDK instance
  * 
  * @example
  * ```typescript
- * const sdk = await initializeSDK({
- *   environment: 'production',
- *   debug: false,
- *   observability: {
- *     logging: true,
- *     tracing: true,
- *     audit: true
+ * import { createSDK } from 'namespace-sdk';
+ * 
+ * const sdk = await createSDK({
+ *   debug: true,
+ *   credentials: {
+ *     providers: ['env', 'file'],
+ *     defaultProvider: 'env'
  *   }
  * });
  * 
- * // List available tools
- * const tools = await sdk.listTools();
+ * // Register tools
+ * sdk.registerTool(myTool);
  * 
- * // Invoke a tool
- * const result = await sdk.invokeTool('github_create_issue', {
- *   repository: 'owner/repo',
- *   title: 'Bug report',
- *   body: 'Description of the issue'
- * });
+ * // Invoke tools
+ * const result = await sdk.invokeTool('my_tool', { param: 'value' });
  * ```
  */
-export async function initializeSDK(config: SDKConfig = {}): Promise<SDK> {
-  const sdk = new SDK(config);
+export async function createSDK(config?: SDKConfig): Promise<NamespaceSDK> {
+  const sdk = new NamespaceSDK(config);
   await sdk.initialize();
   return sdk;
 }
 
 /**
- * Default export for convenience
+ * Default export
  */
 export default {
-  initializeSDK,
-  SDK,
-  ToolRegistry,
-  CredentialManager,
-  SchemaValidator,
-  Logger,
-  ConfigManager
+  NamespaceSDK,
+  createSDK,
+  VERSION
 };

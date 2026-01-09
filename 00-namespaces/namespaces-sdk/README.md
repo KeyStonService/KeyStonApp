@@ -1,238 +1,291 @@
 # namespace-sdk
 
-> A machine-native, auditable platform integration layer for MCP tool wrapping
-
-[![npm version](https://img.shields.io/npm/v/namespace-sdk.svg)](https://www.npmjs.com/package/namespace-sdk)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue.svg)](https://www.typescriptlang.org/)
+A Machine-Native, Auditable Platform Integration Layer for MCP Tool Wrapping
 
 ## Overview
 
-`namespace-sdk` is a comprehensive SDK designed to wrap external APIs, SDKs, and service interfaces into standardized, MCP-compatible, and auditable tools. It provides a robust foundation for building machine-native governance systems with enterprise-grade features.
+`namespace-sdk` is a comprehensive SDK designed to wrap external APIs, SDKs, and service interfaces (including GitHub, Cloudflare, OpenAI, and Google APIs) into standardized, MCP-compatible, and auditable tools. It provides a robust foundation for building machine-native governance systems with enterprise-grade security, observability, and extensibility.
 
-## Key Features
+## Features
 
-- 🔌 **Multi-Service Integration** - Built-in adapters for GitHub, Cloudflare, OpenAI, Google, and more
-- 🛡️ **Security First** - Comprehensive credential management with multiple provider support
-- 📊 **Full Observability** - Logging, tracing, metrics, and audit trails out of the box
-- ✅ **Schema Validation** - Automatic validation of all inputs and outputs
-- 🔧 **Extensible** - Plugin system for custom adapters and tools
-- 📝 **Type Safe** - Full TypeScript support with strong typing
-- 🎯 **MCP Compliant** - Full support for Model Context Protocol
+### Core Capabilities
 
-## Quick Start
+- **MCP Protocol Compliance**: Full support for Model Context Protocol (MCP) tool wrapping and invocation
+- **Multi-Service Integration**: Built-in adapters for GitHub, Cloudflare, OpenAI, Google, and extensible for custom services
+- **Schema Validation**: Comprehensive JSON Schema validation for all tool inputs and outputs
+- **Credential Management**: Secure, multi-provider credential handling with rotation and expiration support
+- **Observability**: Built-in logging, tracing, metrics, and audit trails
+- **Plugin System**: Hot-pluggable architecture for dynamic tool and adapter registration
+- **Type Safety**: Full TypeScript support with comprehensive type definitions
 
-### Installation
+### Security & Governance
+
+- **Audit Trails**: Tamper-evident logging of all sensitive operations
+- **Credential Security**: Support for environment variables, files, HashiCorp Vault, and cloud secret managers
+- **Input Validation**: Multi-layer validation to prevent injection and malformed data
+- **Least Privilege**: Scoped credentials and minimal permission requirements
+- **Compliance Ready**: Built-in support for GDPR, HIPAA, and SOC 2 requirements
+
+### Developer Experience
+
+- **Intuitive API**: Clean, fluent API design for easy integration
+- **Comprehensive Documentation**: Detailed guides, API references, and examples
+- **CLI Tools**: Command-line interface for tool discovery, invocation, and diagnostics
+- **Testing Support**: Built-in testing utilities and contract testing support
+- **Hot Reload**: Dynamic configuration and plugin loading without restarts
+
+## Installation
 
 ```bash
-npm install namespace-sdk
+npm install @machine-native-ops/namespaces-sdk
 ```
+
+Or with yarn:
+
+```bash
+yarn add @machine-native-ops/namespaces-sdk
+```
+
+## Quick Start
 
 ### Basic Usage
 
 ```typescript
-import { initializeSDK } from 'namespace-sdk';
+import { createSDK } from '@machine-native-ops/namespaces-sdk';
 
-// Initialize the SDK
-const sdk = await initializeSDK({
-  environment: 'production',
-  observability: {
-    logging: true,
-    audit: true
+// Create and initialize SDK
+const sdk = await createSDK({
+  debug: true,
+  credentials: {
+    providers: ['env', 'file'],
+    defaultProvider: 'env'
   }
 });
 
+// Register a tool
+sdk.registerTool(myTool);
+
 // List available tools
-const tools = await sdk.listTools();
+const tools = sdk.listTools();
+console.log('Available tools:', tools);
 
 // Invoke a tool
-const result = await sdk.invokeTool('github_create_issue', {
-  repository: 'owner/repo',
-  title: 'Bug report',
-  body: 'Description of the issue'
+const result = await sdk.invokeTool('my_tool', {
+  param1: 'value1',
+  param2: 'value2'
 });
 
-// Shutdown
+console.log('Result:', result);
+
+// Cleanup
 await sdk.shutdown();
 ```
 
-## Architecture
+### Creating a Custom Tool
 
-The SDK is organized into several key layers:
+```typescript
+import { createTool, CredentialType } from '@machine-native-ops/namespaces-sdk';
 
-### Core Layer
-- **SDK**: Main orchestration and lifecycle management
-- **Registry**: Tool and plugin registration
-- **Tool**: Base classes for tool wrappers
-- **Errors**: Standardized error handling
+const myTool = createTool()
+  .name('my_custom_tool')
+  .title('My Custom Tool')
+  .description('A custom tool that does something useful')
+  .version('1.0.0')
+  .adapter('my-service')
+  .input({
+    type: 'object',
+    properties: {
+      message: {
+        type: 'string',
+        description: 'Message to process'
+      }
+    },
+    required: ['message']
+  })
+  .output({
+    type: 'object',
+    properties: {
+      result: {
+        type: 'string',
+        description: 'Processed result'
+      }
+    }
+  })
+  .requireCredential('api_key', {
+    scope: 'read',
+    required: true,
+    description: 'API key for authentication'
+  })
+  .handler(async (params, credentials) => {
+    // Tool implementation
+    const result = await processMessage(params.message, credentials.api_key);
+    
+    return {
+      success: true,
+      data: { result }
+    };
+  })
+  .build();
 
-### Schema Layer
-- **Validator**: JSON Schema validation engine
-- **Types**: Type definitions and utilities
-- **Registry**: Schema versioning and compatibility
+// Register the tool
+sdk.registerTool(myTool);
+```
 
-### Credential Layer
-- **Manager**: Centralized credential management
-- **Providers**: Environment, File, Vault, Cloud KMS support
+### Using Service Adapters
 
-### Observability Layer
-- **Logger**: Structured logging
-- **Tracer**: Distributed tracing
-- **Metrics**: Performance metrics
-- **Audit**: Complete audit trail
+```typescript
+import { createSDK } from '@machine-native-ops/namespaces-sdk';
+import { GitHubAdapter } from '@machine-native-ops/namespaces-sdk/adapters/github';
 
-### Adapter Layer
-- **GitHub**: GitHub API integration
-- **Cloudflare**: Cloudflare API integration
-- **OpenAI**: OpenAI API integration
-- **Google**: Google APIs integration
+const sdk = await createSDK();
 
-## Supported Adapters
+// Initialize GitHub adapter
+const github = new GitHubAdapter({
+  token: process.env.GITHUB_TOKEN
+});
 
-| Adapter | Status | Tools |
-|---------|--------|-------|
-| GitHub | ✅ Ready | create_issue, list_repos, create_pr, get_file, commit_file |
-| Cloudflare | 🚧 In Progress | - |
-| OpenAI | 🚧 In Progress | - |
-| Google | 🚧 In Progress | - |
+await github.initialize(sdk);
+
+// Use GitHub tools
+const result = await sdk.invokeTool('github_create_issue', {
+  repository: 'owner/repo',
+  title: 'Issue title',
+  body: 'Issue description'
+});
+```
 
 ## Configuration
 
 ### Environment Variables
 
 ```bash
-# Credentials
-SDK_CRED_GITHUB_TOKEN=ghp_xxxxx
-SDK_CRED_OPENAI_API_KEY=sk-xxxxx
+# SDK Configuration
+SDK_ENVIRONMENT=development
+SDK_DEBUG=true
 
-# Configuration
-SDK_DEBUG=false
+# Logging
 SDK_LOG_LEVEL=info
-SDK_AUDIT_ENABLED=true
+SDK_LOG_FORMAT=json
+
+# Credentials
+SDK_GITHUB_TOKEN=your_token_here
+SDK_OPENAI_API_KEY=your_key_here
 ```
 
 ### Configuration File
 
-Create `config/production.json`:
+Create a `config.json` file:
 
 ```json
 {
   "environment": "production",
-  "sdk": {
-    "debug": false
+  "logging": {
+    "level": "info",
+    "format": "json",
+    "enabled": true
+  },
+  "tracing": {
+    "enabled": true,
+    "samplingRate": 1.0
   },
   "credentials": {
     "providers": ["env", "vault"],
-    "cacheTTL": 300
-  },
-  "observability": {
-    "logging": {
-      "enabled": true,
-      "level": "info"
-    },
-    "audit": {
-      "enabled": true,
-      "storage": "file"
-    }
+    "defaultProvider": "vault"
   }
 }
 ```
+
+## Architecture
+
+### Core Components
+
+- **SDK Core**: Main orchestration and lifecycle management
+- **Tool Registry**: Dynamic tool discovery and registration
+- **Schema Validator**: JSON Schema validation engine
+- **Credential Manager**: Secure credential storage and retrieval
+- **Observability Layer**: Logging, tracing, metrics, and audit trails
+- **Plugin System**: Hot-pluggable extension architecture
+
+### Service Adapters
+
+- **GitHub**: Repository management, issues, pull requests
+- **Cloudflare**: DNS, Workers, KV, R2
+- **OpenAI**: Chat completions, embeddings, assistants
+- **Google**: Cloud services, APIs, authentication
 
 ## Documentation
 
 - [Quick Start Guide](./src/docs/quickstart.md)
 - [API Reference](./src/docs/api.md)
-- [Adapter Documentation](./src/docs/adapters.md)
+- [Service Adapters](./src/docs/adapters.md)
 - [Plugin Development](./src/docs/plugins.md)
 - [Security Best Practices](./src/docs/security.md)
 
-## Examples
-
-### Creating a GitHub Issue
-
-```typescript
-const result = await sdk.invokeTool('github_create_issue', {
-  repository: 'owner/repo',
-  title: 'Bug: Application crashes on startup',
-  body: 'Detailed description of the bug...',
-  labels: ['bug', 'high-priority']
-});
-
-console.log('Issue created:', result.data.url);
-```
-
-### Using Custom Context
-
-```typescript
-const result = await sdk.invokeTool(
-  'github_create_issue',
-  input,
-  {
-    userId: 'user123',
-    sessionId: 'session456',
-    correlationId: 'request789'
-  }
-);
-```
-
-### Querying Audit Logs
-
-```typescript
-const auditLogger = sdk.getAuditLogger();
-const events = await auditLogger.query({
-  eventTypes: ['tool_invoked'],
-  startTime: new Date('2024-01-01'),
-  success: true
-});
-
-console.log(`Found ${events.length} successful tool invocations`);
-```
-
 ## Development
 
-### Building
+### Setup
 
 ```bash
+# Install dependencies
+npm install
+
+# Build the project
 npm run build
-```
 
-### Testing
-
-```bash
+# Run tests
 npm test
+
+# Run tests with coverage
 npm run test:coverage
+
+# Lint code
+npm run lint
+
+# Format code
+npm run format
 ```
 
-### Linting
+### Project Structure
 
-```bash
-npm run lint
-npm run lint:fix
+```
+namespaces-sdk/
+├── src/
+│   ├── core/           # Core SDK logic
+│   ├── adapters/       # Service adapters
+│   ├── schema/         # Schema validation
+│   ├── credentials/    # Credential management
+│   ├── observability/  # Logging, tracing, metrics
+│   ├── config/         # Configuration management
+│   ├── plugins/        # Plugin system
+│   └── index.ts        # Main entry point
+├── docs/               # Documentation
+├── examples/           # Usage examples
+└── tests/              # Test suites
 ```
 
 ## Contributing
 
-Contributions are welcome! Please see [CONTRIBUTING.md](../../CONTRIBUTING.md) for guidelines.
+We welcome contributions! Please see our [Contributing Guide](../../CONTRIBUTING.md) for details.
 
 ## License
 
-MIT License - see [LICENSE](./LICENSE) for details.
+MIT License - see [LICENSE](./LICENSE) file for details.
 
 ## Support
 
-- 📖 [Documentation](https://namespace-sdk.io/docs)
-- 🐛 [Issue Tracker](https://github.com/ninjatech-ai/machine-native-ops/issues)
-- 💬 [Discussions](https://github.com/ninjatech-ai/machine-native-ops/discussions)
+- GitHub Issues: [Report bugs or request features](https://github.com/your-org/machine-native-ops/issues)
+- Documentation: [Full documentation](https://github.com/your-org/machine-native-ops/tree/main/00-namespaces/namespaces-sdk)
+- Community: [Join our discussions](https://github.com/your-org/machine-native-ops/discussions)
 
 ## Roadmap
 
-- [ ] Additional adapters (AWS, Azure, Stripe, etc.)
-- [ ] GraphQL support
-- [ ] WebSocket support for real-time tools
+- [ ] Additional service adapters (AWS, Azure, Stripe, etc.)
+- [ ] GraphQL API support
+- [ ] WebSocket tool invocation
+- [ ] Multi-language SDK generation
 - [ ] Enhanced plugin marketplace
-- [ ] Visual tool builder
-- [ ] Performance optimizations
+- [ ] Real-time collaboration features
 
----
+## Acknowledgments
 
-Built with ❤️ by [NinjaTech AI](https://ninjatech.ai)
+Built with ❤️ by the NinjaTech AI team as part of the machine-native-ops project.

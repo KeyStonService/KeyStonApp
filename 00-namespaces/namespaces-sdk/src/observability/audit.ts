@@ -5,377 +5,489 @@
  */
 
 /**
- * Audit event type
- */
-export enum AuditEventType {
-  SDK_INITIALIZED = 'sdk_initialized',
-  SDK_SHUTDOWN = 'sdk_shutdown',
-  TOOL_INVOKED = 'tool_invoked',
-  TOOL_INVOCATION_FAILED = 'tool_invocation_failed',
-  CREDENTIAL_ACCESSED = 'credential_accessed',
-  CREDENTIAL_STORED = 'credential_stored',
-  CREDENTIAL_DELETED = 'credential_deleted',
-  CREDENTIAL_ROTATED = 'credential_rotated',
-  PLUGIN_LOADED = 'plugin_loaded',
-  PLUGIN_UNLOADED = 'plugin_unloaded',
-  CONFIG_CHANGED = 'config_changed',
-  SCHEMA_REGISTERED = 'schema_registered',
-  ADAPTER_REGISTERED = 'adapter_registered',
-  SECURITY_VIOLATION = 'security_violation',
-  CUSTOM = 'custom'
-}
-
-/**
- * Audit event interface
+ * Audit event
  */
 export interface AuditEvent {
   /** Event ID */
-  id?: string;
+  id: string;
+  
   /** Event type */
-  event: string | AuditEventType;
-  /** Timestamp */
+  type: string;
+  
+  /** Event timestamp */
   timestamp: Date;
-  /** User/agent identifier */
-  userId?: string;
-  /** Session identifier */
+  
+  /** Actor (user, service, etc.) */
+  actor?: {
+    id?: string;
+    type?: string;
+    name?: string;
+  };
+  
+  /** Resource being accessed */
+  resource?: {
+    type?: string;
+    id?: string;
+    name?: string;
+  };
+  
+  /** Action performed */
+  action: string;
+  
+  /** Result of the action */
+  result: 'success' | 'failure' | 'partial';
+  
+  /** Additional event data */
+  data?: Record<string, any>;
+  
+  /** Request ID for correlation */
+  requestId?: string;
+  
+  /** Session ID */
   sessionId?: string;
-  /** Correlation ID */
-  correlationId?: string;
-  /** Tool name (for tool events) */
-  toolName?: string;
-  /** Service name */
-  service?: string;
-  /** Success status */
-  success?: boolean;
-  /** Duration in milliseconds */
-  duration?: number;
-  /** Error message */
-  error?: string;
-  /** Additional metadata */
-  metadata?: Record<string, any>;
+  
   /** IP address */
   ipAddress?: string;
+  
   /** User agent */
   userAgent?: string;
 }
 
 /**
- * Audit storage interface
+ * Audit logger options
  */
-export interface AuditStorage {
-  store(event: AuditEvent): Promise<void>;
-  query(filter: AuditFilter): Promise<AuditEvent[]>;
-  export(format: 'json' | 'csv'): Promise<string>;
-  shutdown(): Promise<void>;
-}
-
-/**
- * Audit filter
- */
-export interface AuditFilter {
-  eventTypes?: (string | AuditEventType)[];
-  userId?: string;
-  sessionId?: string;
-  correlationId?: string;
-  toolName?: string;
-  service?: string;
-  startTime?: Date;
-  endTime?: Date;
-  success?: boolean;
-  limit?: number;
-}
-
-/**
- * In-memory audit storage
- */
-export class InMemoryAuditStorage implements AuditStorage {
-  private events: AuditEvent[];
-  private maxEvents: number;
-
-  constructor(maxEvents: number = 10000) {
-    this.events = [];
-    this.maxEvents = maxEvents;
-  }
-
-  async store(event: AuditEvent): Promise<void> {
-    // Generate ID if not provided
-    if (!event.id) {
-      event.id = this.generateId();
-    }
-
-    this.events.push(event);
-
-    // Trim if exceeds max
-    if (this.events.length > this.maxEvents) {
-      this.events = this.events.slice(-this.maxEvents);
-    }
-  }
-
-  async query(filter: AuditFilter): Promise<AuditEvent[]> {
-    let results = [...this.events];
-
-    // Apply filters
-    if (filter.eventTypes && filter.eventTypes.length > 0) {
-      results = results.filter(e => filter.eventTypes!.includes(e.event));
-    }
-
-    if (filter.userId) {
-      results = results.filter(e => e.userId === filter.userId);
-    }
-
-    if (filter.sessionId) {
-      results = results.filter(e => e.sessionId === filter.sessionId);
-    }
-
-    if (filter.correlationId) {
-      results = results.filter(e => e.correlationId === filter.correlationId);
-    }
-
-    if (filter.toolName) {
-      results = results.filter(e => e.toolName === filter.toolName);
-    }
-
-    if (filter.service) {
-      results = results.filter(e => e.service === filter.service);
-    }
-
-    if (filter.startTime) {
-      results = results.filter(e => e.timestamp >= filter.startTime!);
-    }
-
-    if (filter.endTime) {
-      results = results.filter(e => e.timestamp <= filter.endTime!);
-    }
-
-    if (filter.success !== undefined) {
-      results = results.filter(e => e.success === filter.success);
-    }
-
-    // Apply limit
-    if (filter.limit && filter.limit > 0) {
-      results = results.slice(0, filter.limit);
-    }
-
-    return results;
-  }
-
-  async export(format: 'json' | 'csv'): Promise<string> {
-    if (format === 'json') {
-      return JSON.stringify(this.events, null, 2);
-    }
-
-    // CSV export
-    if (this.events.length === 0) {
-      return '';
-    }
-
-    const headers = Object.keys(this.events[0]).join(',');
-    const rows = this.events.map(event => {
-      return Object.values(event).map(v => {
-        if (v === null || v === undefined) return '';
-        if (typeof v === 'object') return JSON.stringify(v);
-        return String(v);
-      }).join(',');
-    });
-
-    return [headers, ...rows].join('\n');
-  }
-
-  async shutdown(): Promise<void> {
-    // No-op for in-memory storage
-  }
-
-  private generateId(): string {
-    return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-  }
-
-  getEventCount(): number {
-    return this.events.length;
-  }
-
-  clear(): void {
-    this.events = [];
-  }
-}
-
-/**
- * File-based audit storage
- */
-export class FileAuditStorage implements AuditStorage {
-  private filePath: string;
-  private buffer: AuditEvent[];
-  private flushInterval: NodeJS.Timeout | null;
-
-  constructor(filePath: string, flushIntervalMs: number = 5000) {
-    this.filePath = filePath;
-    this.buffer = [];
-    this.flushInterval = setInterval(() => this.flush(), flushIntervalMs);
-  }
-
-  async store(event: AuditEvent): Promise<void> {
-    if (!event.id) {
-      event.id = this.generateId();
-    }
-
-    this.buffer.push(event);
-
-    // Auto-flush on security violations
-    if (event.event === AuditEventType.SECURITY_VIOLATION) {
-      await this.flush();
-    }
-  }
-
-  private async flush(): Promise<void> {
-    if (this.buffer.length === 0) return;
-
-    const events = this.buffer.splice(0);
-    const lines = events.map(e => JSON.stringify(e)).join('\n') + '\n';
-
-    // In a real implementation, this would write to file
-    // const fs = require('fs/promises');
-    // await fs.appendFile(this.filePath, lines);
-  }
-
-  async query(filter: AuditFilter): Promise<AuditEvent[]> {
-    // In a real implementation, this would read and parse the file
-    return [];
-  }
-
-  async export(format: 'json' | 'csv'): Promise<string> {
-    // In a real implementation, this would read the entire file
-    return '';
-  }
-
-  async shutdown(): Promise<void> {
-    if (this.flushInterval) {
-      clearInterval(this.flushInterval);
-      this.flushInterval = null;
-    }
-    await this.flush();
-  }
-
-  private generateId(): string {
-    return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-  }
-}
-
-/**
- * Audit logger configuration
- */
-export interface AuditLoggerConfig {
+export interface AuditLoggerOptions {
+  /** Enable audit logging */
   enabled?: boolean;
-  storage?: AuditStorage;
-  includeMetadata?: boolean;
-  sanitizeSensitiveData?: boolean;
+  
+  /** Audit log format */
+  format?: 'json' | 'text';
+  
+  /** Include sensitive data */
+  includeSensitiveData?: boolean;
+  
+  /** Custom audit handler */
+  handler?: (event: AuditEvent) => void;
+  
+  /** Retention period in days */
+  retentionDays?: number;
 }
 
 /**
- * Audit logger class
+ * Audit Logger Class
+ * 
+ * Responsibilities:
+ * - Record all sensitive operations
+ * - Support tamper-evident storage
+ * - Export audit trails for compliance
+ * - Align with governance requirements
  */
 export class AuditLogger {
-  private config: AuditLoggerConfig;
-  private storage: AuditStorage;
+  private options: Required<AuditLoggerOptions>;
+  private events: AuditEvent[] = [];
+  private eventCounter: number = 0;
 
-  constructor(config: AuditLoggerConfig = {}) {
-    this.config = {
-      enabled: true,
-      includeMetadata: true,
-      sanitizeSensitiveData: true,
-      ...config
+  constructor(options: AuditLoggerOptions = {}) {
+    this.options = {
+      enabled: options.enabled !== false,
+      format: options.format || 'json',
+      includeSensitiveData: options.includeSensitiveData || false,
+      handler: options.handler || this.defaultHandler.bind(this),
+      retentionDays: options.retentionDays || 90
     };
-
-    this.storage = config.storage || new InMemoryAuditStorage();
-  }
-
-  async initialize(): Promise<void> {
-    // Initialize audit logger
   }
 
   /**
    * Log an audit event
    */
-  async log(event: AuditEvent): Promise<void> {
-    if (!this.config.enabled) {
+  log(
+    type: string,
+    data?: Record<string, any>,
+    options?: {
+      actor?: AuditEvent['actor'];
+      resource?: AuditEvent['resource'];
+      action?: string;
+      result?: AuditEvent['result'];
+      requestId?: string;
+      sessionId?: string;
+    }
+  ): void {
+    if (!this.options.enabled) {
       return;
     }
 
-    // Sanitize sensitive data if enabled
-    if (this.config.sanitizeSensitiveData) {
-      event = this.sanitize(event);
-    }
+    const event: AuditEvent = {
+      id: this.generateEventId(),
+      type,
+      timestamp: new Date(),
+      actor: options?.actor,
+      resource: options?.resource,
+      action: options?.action || type,
+      result: options?.result || 'success',
+      data: this.sanitizeData(data),
+      requestId: options?.requestId,
+      sessionId: options?.sessionId
+    };
 
-    // Ensure timestamp
-    if (!event.timestamp) {
-      event.timestamp = new Date();
-    }
-
-    await this.storage.store(event);
+    this.events.push(event);
+    this.options.handler(event);
   }
 
   /**
-   * Query audit events
+   * Log a successful operation
    */
-  async query(filter: AuditFilter): Promise<AuditEvent[]> {
-    return this.storage.query(filter);
+  logSuccess(
+    type: string,
+    data?: Record<string, any>,
+    options?: Omit<Parameters<typeof this.log>[2], 'result'>
+  ): void {
+    this.log(type, data, { ...options, result: 'success' });
+  }
+
+  /**
+   * Log a failed operation
+   */
+  logFailure(
+    type: string,
+    data?: Record<string, any>,
+    options?: Omit<Parameters<typeof this.log>[2], 'result'>
+  ): void {
+    this.log(type, data, { ...options, result: 'failure' });
+  }
+
+  /**
+   * Log credential access
+   */
+  logCredentialAccess(
+    credentialKey: string,
+    action: 'get' | 'set' | 'delete' | 'rotate',
+    result: 'success' | 'failure',
+    options?: {
+      actor?: AuditEvent['actor'];
+      requestId?: string;
+    }
+  ): void {
+    this.log('credential.access', {
+      credentialKey,
+      action
+    }, {
+      ...options,
+      resource: {
+        type: 'credential',
+        id: credentialKey
+      },
+      action,
+      result
+    });
+  }
+
+  /**
+   * Log tool invocation
+   */
+  logToolInvocation(
+    toolName: string,
+    result: 'success' | 'failure',
+    data?: Record<string, any>,
+    options?: {
+      actor?: AuditEvent['actor'];
+      requestId?: string;
+      duration?: number;
+    }
+  ): void {
+    this.log('tool.invocation', {
+      toolName,
+      duration: options?.duration,
+      ...data
+    }, {
+      ...options,
+      resource: {
+        type: 'tool',
+        name: toolName
+      },
+      action: 'invoke',
+      result
+    });
+  }
+
+  /**
+   * Log configuration change
+   */
+  logConfigChange(
+    configKey: string,
+    oldValue: any,
+    newValue: any,
+    options?: {
+      actor?: AuditEvent['actor'];
+      requestId?: string;
+    }
+  ): void {
+    this.log('config.change', {
+      configKey,
+      oldValue: this.sanitizeValue(oldValue),
+      newValue: this.sanitizeValue(newValue)
+    }, {
+      ...options,
+      resource: {
+        type: 'config',
+        id: configKey
+      },
+      action: 'update',
+      result: 'success'
+    });
+  }
+
+  /**
+   * Log authentication event
+   */
+  logAuthentication(
+    result: 'success' | 'failure',
+    data?: Record<string, any>,
+    options?: {
+      actor?: AuditEvent['actor'];
+      requestId?: string;
+    }
+  ): void {
+    this.log('auth.authentication', data, {
+      ...options,
+      action: 'authenticate',
+      result
+    });
+  }
+
+  /**
+   * Log authorization event
+   */
+  logAuthorization(
+    resource: string,
+    action: string,
+    result: 'success' | 'failure',
+    options?: {
+      actor?: AuditEvent['actor'];
+      requestId?: string;
+    }
+  ): void {
+    this.log('auth.authorization', {
+      resource,
+      action
+    }, {
+      ...options,
+      resource: {
+        type: 'resource',
+        id: resource
+      },
+      action,
+      result
+    });
+  }
+
+  /**
+   * Get all audit events
+   */
+  getEvents(): AuditEvent[] {
+    return [...this.events];
+  }
+
+  /**
+   * Get events by type
+   */
+  getEventsByType(type: string): AuditEvent[] {
+    return this.events.filter(event => event.type === type);
+  }
+
+  /**
+   * Get events by time range
+   */
+  getEventsByTimeRange(start: Date, end: Date): AuditEvent[] {
+    return this.events.filter(
+      event => event.timestamp >= start && event.timestamp <= end
+    );
+  }
+
+  /**
+   * Get events by actor
+   */
+  getEventsByActor(actorId: string): AuditEvent[] {
+    return this.events.filter(event => event.actor?.id === actorId);
   }
 
   /**
    * Export audit trail
    */
-  async export(format: 'json' | 'csv' = 'json'): Promise<string> {
-    return this.storage.export(format);
+  export(format: 'json' | 'csv' = 'json'): string {
+    if (format === 'json') {
+      return JSON.stringify(this.events, null, 2);
+    } else {
+      return this.exportCSV();
+    }
   }
 
   /**
-   * Sanitize sensitive data
+   * Clear old events based on retention policy
    */
-  private sanitize(event: AuditEvent): AuditEvent {
-    const sanitized = { ...event };
+  cleanup(): void {
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - this.options.retentionDays);
 
-    // Remove sensitive fields from metadata
-    if (sanitized.metadata) {
-      const { password, token, apiKey, secret, ...safeMetadata } = sanitized.metadata;
-      sanitized.metadata = safeMetadata;
+    const beforeCount = this.events.length;
+    this.events = this.events.filter(event => event.timestamp >= cutoffDate);
+    const afterCount = this.events.length;
+
+    if (beforeCount !== afterCount) {
+      console.log(`Audit cleanup: removed ${beforeCount - afterCount} old events`);
+    }
+  }
+
+  /**
+   * Flush audit events
+   */
+  async flush(): Promise<void> {
+    // Flush any buffered events
+    // In production, this would export to an audit backend
+    this.events = [];
+  }
+
+  /**
+   * Enable or disable audit logging
+   */
+  setEnabled(enabled: boolean): void {
+    this.options.enabled = enabled;
+  }
+
+  /**
+   * Check if audit logging is enabled
+   */
+  isEnabled(): boolean {
+    return this.options.enabled;
+  }
+
+  /**
+   * Generate event ID
+   */
+  private generateEventId(): string {
+    this.eventCounter++;
+    const timestamp = Date.now();
+    return `audit_${timestamp}_${this.eventCounter}`;
+  }
+
+  /**
+   * Sanitize data to remove sensitive information
+   */
+  private sanitizeData(data?: Record<string, any>): Record<string, any> | undefined {
+    if (!data) {
+      return undefined;
+    }
+
+    if (this.options.includeSensitiveData) {
+      return data;
+    }
+
+    const sanitized: Record<string, any> = {};
+
+    for (const [key, value] of Object.entries(data)) {
+      sanitized[key] = this.sanitizeValue(value);
     }
 
     return sanitized;
   }
 
   /**
-   * Get audit statistics
+   * Sanitize a single value
    */
-  async getStats(): Promise<any> {
-    const allEvents = await this.storage.query({});
-
-    const total = allEvents.length;
-    const successful = allEvents.filter(e => e.success === true).length;
-    const failed = allEvents.filter(e => e.success === false).length;
-
-    const byEventType: Record<string, number> = {};
-    for (const event of allEvents) {
-      byEventType[event.event] = (byEventType[event.event] || 0) + 1;
+  private sanitizeValue(value: any): any {
+    if (this.options.includeSensitiveData) {
+      return value;
     }
 
-    const byUser: Record<string, number> = {};
-    for (const event of allEvents) {
-      if (event.userId) {
-        byUser[event.userId] = (byUser[event.userId] || 0) + 1;
+    // Redact sensitive fields
+    const sensitiveKeys = [
+      'password',
+      'token',
+      'secret',
+      'key',
+      'credential',
+      'apiKey',
+      'api_key'
+    ];
+
+    if (typeof value === 'string') {
+      // Check if this looks like a sensitive value
+      if (value.length > 20 && /^[A-Za-z0-9+/=_-]+$/.test(value)) {
+        return '[REDACTED]';
       }
     }
 
-    return {
-      total,
-      successful,
-      failed,
-      byEventType,
-      byUser
-    };
+    if (typeof value === 'object' && value !== null) {
+      const sanitized: any = Array.isArray(value) ? [] : {};
+
+      for (const [k, v] of Object.entries(value)) {
+        const lowerKey = k.toLowerCase();
+        const isSensitive = sensitiveKeys.some(sk => lowerKey.includes(sk));
+
+        if (isSensitive) {
+          sanitized[k] = '[REDACTED]';
+        } else {
+          sanitized[k] = this.sanitizeValue(v);
+        }
+      }
+
+      return sanitized;
+    }
+
+    return value;
   }
 
   /**
-   * Shutdown audit logger
+   * Export as CSV
    */
-  async shutdown(): Promise<void> {
-    await this.storage.shutdown();
+  private exportCSV(): string {
+    const headers = [
+      'id',
+      'type',
+      'timestamp',
+      'actor',
+      'resource',
+      'action',
+      'result',
+      'requestId'
+    ];
+
+    const rows = this.events.map(event => [
+      event.id,
+      event.type,
+      event.timestamp.toISOString(),
+      event.actor?.id || '',
+      event.resource?.id || '',
+      event.action,
+      event.result,
+      event.requestId || ''
+    ]);
+
+    const lines = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+    ];
+
+    return lines.join('\n');
   }
+
+  /**
+   * Default audit handler
+   */
+  private defaultHandler(event: AuditEvent): void {
+    // Default handler logs to console
+    if (this.options.format === 'json') {
+      console.log('[AUDIT]', JSON.stringify(event));
+    } else {
+      console.log(
+        `[AUDIT] ${event.timestamp.toISOString()} ${event.type} ${event.action} ${event.result}`
+      );
+    }
+  }
+}
+
+/**
+ * Create an audit logger instance
+ */
+export function createAuditLogger(options?: AuditLoggerOptions): AuditLogger {
+  return new AuditLogger(options);
 }

@@ -6,246 +6,412 @@
  */
 
 /**
- * Standard error codes following JSON-RPC 2.0 specification
+ * Standard error codes
+ * Aligned with JSON-RPC 2.0 and MCP protocol conventions
  */
 export enum ErrorCode {
-  // JSON-RPC standard errors
-  PARSE_ERROR = -32700,
-  INVALID_REQUEST = -32600,
-  METHOD_NOT_FOUND = -32601,
-  INVALID_PARAMS = -32602,
-  INTERNAL_ERROR = -32603,
-  
-  // MCP-specific errors (range: -32000 to -32099)
-  TOOL_NOT_FOUND = -32000,
-  TOOL_EXECUTION_ERROR = -32001,
-  SCHEMA_VALIDATION_ERROR = -32002,
-  CREDENTIAL_ERROR = -32003,
-  ADAPTER_ERROR = -32004,
-  PLUGIN_ERROR = -32005,
-  CONFIGURATION_ERROR = -32006,
-  RATE_LIMIT_ERROR = -32007,
-  AUTHENTICATION_ERROR = -32008,
-  AUTHORIZATION_ERROR = -32009,
-  TIMEOUT_ERROR = -32010,
-  NETWORK_ERROR = -32011,
-  
-  // Application-specific errors (range: -32100 to -32199)
-  AUDIT_ERROR = -32100,
-  OBSERVABILITY_ERROR = -32101,
-  REGISTRY_ERROR = -32102
+  // SDK Lifecycle Errors (1xxx)
+  INITIALIZATION_FAILED = 'SDK_1001',
+  INVALID_STATE = 'SDK_1002',
+  SHUTDOWN_FAILED = 'SDK_1003',
+
+  // Tool Registry Errors (2xxx)
+  TOOL_NOT_FOUND = 'REGISTRY_2001',
+  TOOL_ALREADY_REGISTERED = 'REGISTRY_2002',
+  INVALID_TOOL_METADATA = 'REGISTRY_2003',
+  TOOL_REGISTRATION_FAILED = 'REGISTRY_2004',
+
+  // Tool Execution Errors (3xxx)
+  TOOL_EXECUTION_FAILED = 'TOOL_3001',
+  TOOL_TIMEOUT = 'TOOL_3002',
+  TOOL_CANCELLED = 'TOOL_3003',
+  INVALID_TOOL_PARAMS = 'TOOL_3004',
+
+  // Schema Validation Errors (4xxx)
+  VALIDATION_FAILED = 'SCHEMA_4001',
+  INVALID_SCHEMA = 'SCHEMA_4002',
+  SCHEMA_NOT_FOUND = 'SCHEMA_4003',
+  SCHEMA_VERSION_MISMATCH = 'SCHEMA_4004',
+
+  // Credential Errors (5xxx)
+  CREDENTIAL_NOT_FOUND = 'CRED_5001',
+  CREDENTIAL_EXPIRED = 'CRED_5002',
+  CREDENTIAL_INVALID = 'CRED_5003',
+  CREDENTIAL_PROVIDER_FAILED = 'CRED_5004',
+  CREDENTIAL_ACCESS_DENIED = 'CRED_5005',
+
+  // Plugin Errors (6xxx)
+  PLUGIN_NOT_FOUND = 'PLUGIN_6001',
+  PLUGIN_LOAD_FAILED = 'PLUGIN_6002',
+  PLUGIN_INCOMPATIBLE = 'PLUGIN_6003',
+  PLUGIN_INITIALIZATION_FAILED = 'PLUGIN_6004',
+
+  // Configuration Errors (7xxx)
+  CONFIG_LOAD_FAILED = 'CONFIG_7001',
+  CONFIG_INVALID = 'CONFIG_7002',
+  CONFIG_NOT_FOUND = 'CONFIG_7003',
+
+  // Network/API Errors (8xxx)
+  NETWORK_ERROR = 'NET_8001',
+  API_ERROR = 'NET_8002',
+  RATE_LIMIT_EXCEEDED = 'NET_8003',
+  TIMEOUT = 'NET_8004',
+  CONNECTION_FAILED = 'NET_8005',
+
+  // Protocol Errors (9xxx) - MCP/JSON-RPC
+  INVALID_REQUEST = 'PROTO_9001',
+  METHOD_NOT_FOUND = 'PROTO_9002',
+  INVALID_PARAMS = 'PROTO_9003',
+  INTERNAL_ERROR = 'PROTO_9004',
+  PARSE_ERROR = 'PROTO_9005',
+
+  // Generic Errors
+  UNKNOWN_ERROR = 'UNKNOWN_0000',
+  NOT_IMPLEMENTED = 'NOT_IMPL_0001'
+}
+
+/**
+ * Error severity levels
+ */
+export enum ErrorSeverity {
+  DEBUG = 'debug',
+  INFO = 'info',
+  WARNING = 'warning',
+  ERROR = 'error',
+  CRITICAL = 'critical'
 }
 
 /**
  * Base SDK Error class
+ * All SDK errors extend this class
  */
 export class SDKError extends Error {
-  public readonly code: ErrorCode;
-  public readonly data?: any;
+  public readonly code: ErrorCode | string;
+  public readonly severity: ErrorSeverity;
   public readonly timestamp: Date;
-  public readonly correlationId?: string;
+  public readonly cause?: Error;
+  public readonly details?: any;
+  public readonly context?: Record<string, any>;
 
   constructor(
+    code: ErrorCode | string,
     message: string,
-    code: ErrorCode = ErrorCode.INTERNAL_ERROR,
-    data?: any,
-    correlationId?: string
+    cause?: Error | any,
+    options?: {
+      severity?: ErrorSeverity;
+      details?: any;
+      context?: Record<string, any>;
+    }
   ) {
     super(message);
-    this.name = this.constructor.name;
-    this.code = code;
-    this.data = data;
-    this.timestamp = new Date();
-    this.correlationId = correlationId;
     
-    // Maintains proper stack trace for where error was thrown
-    Error.captureStackTrace(this, this.constructor);
+    this.name = 'SDKError';
+    this.code = code;
+    this.severity = options?.severity || ErrorSeverity.ERROR;
+    this.timestamp = new Date();
+    this.cause = cause instanceof Error ? cause : undefined;
+    this.details = options?.details || (cause && !(cause instanceof Error) ? cause : undefined);
+    this.context = options?.context;
+
+    // Maintains proper stack trace for where our error was thrown
+    if (Error.captureStackTrace) {
+      Error.captureStackTrace(this, SDKError);
+    }
   }
 
   /**
-   * Convert error to JSON-RPC error format
+   * Convert error to JSON representation
    */
-  toJSONRPC(): any {
+  toJSON(): any {
     return {
+      name: this.name,
       code: this.code,
       message: this.message,
+      severity: this.severity,
+      timestamp: this.timestamp.toISOString(),
+      details: this.details,
+      context: this.context,
+      stack: this.stack,
+      cause: this.cause ? {
+        name: this.cause.name,
+        message: this.cause.message,
+        stack: this.cause.stack
+      } : undefined
+    };
+  }
+
+  /**
+   * Convert error to MCP-compatible error response
+   */
+  toMCPError(): {
+    code: number;
+    message: string;
+    data?: any;
+  } {
+    return {
+      code: this.getMCPErrorCode(),
+      message: this.message,
       data: {
-        ...this.data,
-        timestamp: this.timestamp.toISOString(),
-        correlationId: this.correlationId,
-        stack: this.stack
+        sdkCode: this.code,
+        severity: this.severity,
+        details: this.details,
+        context: this.context
       }
     };
   }
 
   /**
-   * Convert error to audit log format
+   * Get MCP/JSON-RPC compatible error code
    */
-  toAuditLog(): any {
-    return {
-      errorType: this.name,
-      errorCode: this.code,
-      message: this.message,
-      timestamp: this.timestamp.toISOString(),
-      correlationId: this.correlationId,
-      data: this.data
-    };
+  private getMCPErrorCode(): number {
+    // Map SDK error codes to JSON-RPC error codes
+    const codePrefix = this.code.split('_')[0];
+    
+    switch (codePrefix) {
+      case 'PROTO':
+        // Protocol errors map to standard JSON-RPC codes
+        if (this.code === ErrorCode.PARSE_ERROR) return -32700;
+        if (this.code === ErrorCode.INVALID_REQUEST) return -32600;
+        if (this.code === ErrorCode.METHOD_NOT_FOUND) return -32601;
+        if (this.code === ErrorCode.INVALID_PARAMS) return -32602;
+        if (this.code === ErrorCode.INTERNAL_ERROR) return -32603;
+        return -32603; // Internal error
+      
+      case 'TOOL':
+      case 'REGISTRY':
+        return -32001; // Tool/method errors
+      
+      case 'SCHEMA':
+        return -32602; // Invalid params
+      
+      case 'CRED':
+        return -32002; // Authentication/authorization errors
+      
+      case 'NET':
+        return -32003; // Network/API errors
+      
+      default:
+        return -32603; // Internal error
+    }
   }
 }
 
 /**
- * Tool-related errors
+ * Tool execution error
  */
-export class ToolNotFoundError extends SDKError {
-  constructor(toolName: string, correlationId?: string) {
-    super(
-      `Tool '${toolName}' not found in registry`,
-      ErrorCode.TOOL_NOT_FOUND,
-      { toolName },
-      correlationId
-    );
-  }
-}
-
 export class ToolExecutionError extends SDKError {
-  constructor(toolName: string, originalError: Error, correlationId?: string) {
+  constructor(
+    toolName: string,
+    message: string,
+    cause?: Error | any,
+    options?: {
+      details?: any;
+      context?: Record<string, any>;
+    }
+  ) {
     super(
-      `Tool '${toolName}' execution failed: ${originalError.message}`,
-      ErrorCode.TOOL_EXECUTION_ERROR,
-      { toolName, originalError: originalError.message },
-      correlationId
+      ErrorCode.TOOL_EXECUTION_FAILED,
+      `Tool execution failed: ${toolName} - ${message}`,
+      cause,
+      {
+        ...options,
+        context: {
+          ...options?.context,
+          toolName
+        }
+      }
     );
+    this.name = 'ToolExecutionError';
   }
 }
 
 /**
- * Schema validation errors
+ * Validation error
  */
-export class SchemaValidationError extends SDKError {
-  constructor(message: string, validationErrors: any[], correlationId?: string) {
+export class ValidationError extends SDKError {
+  public readonly validationErrors: any[];
+
+  constructor(
+    message: string,
+    validationErrors: any[],
+    options?: {
+      context?: Record<string, any>;
+    }
+  ) {
     super(
+      ErrorCode.VALIDATION_FAILED,
       message,
-      ErrorCode.SCHEMA_VALIDATION_ERROR,
-      { validationErrors },
-      correlationId
+      undefined,
+      {
+        severity: ErrorSeverity.WARNING,
+        details: { validationErrors },
+        context: options?.context
+      }
     );
+    this.name = 'ValidationError';
+    this.validationErrors = validationErrors;
   }
 }
 
 /**
- * Credential-related errors
+ * Credential error
  */
 export class CredentialError extends SDKError {
-  constructor(message: string, credentialType?: string, correlationId?: string) {
+  constructor(
+    message: string,
+    code: ErrorCode = ErrorCode.CREDENTIAL_NOT_FOUND,
+    options?: {
+      details?: any;
+      context?: Record<string, any>;
+    }
+  ) {
+    super(code, message, undefined, {
+      severity: ErrorSeverity.ERROR,
+      ...options
+    });
+    this.name = 'CredentialError';
+  }
+}
+
+/**
+ * Network error
+ */
+export class NetworkError extends SDKError {
+  public readonly statusCode?: number;
+  public readonly response?: any;
+
+  constructor(
+    message: string,
+    options?: {
+      statusCode?: number;
+      response?: any;
+      cause?: Error;
+      context?: Record<string, any>;
+    }
+  ) {
     super(
+      ErrorCode.NETWORK_ERROR,
       message,
-      ErrorCode.CREDENTIAL_ERROR,
-      { credentialType },
-      correlationId
+      options?.cause,
+      {
+        severity: ErrorSeverity.ERROR,
+        details: {
+          statusCode: options?.statusCode,
+          response: options?.response
+        },
+        context: options?.context
+      }
     );
-  }
-}
-
-export class AuthenticationError extends SDKError {
-  constructor(service: string, correlationId?: string) {
-    super(
-      `Authentication failed for service: ${service}`,
-      ErrorCode.AUTHENTICATION_ERROR,
-      { service },
-      correlationId
-    );
-  }
-}
-
-export class AuthorizationError extends SDKError {
-  constructor(operation: string, correlationId?: string) {
-    super(
-      `Authorization failed for operation: ${operation}`,
-      ErrorCode.AUTHORIZATION_ERROR,
-      { operation },
-      correlationId
-    );
+    this.name = 'NetworkError';
+    this.statusCode = options?.statusCode;
+    this.response = options?.response;
   }
 }
 
 /**
- * Adapter-related errors
+ * Rate limit error
  */
-export class AdapterError extends SDKError {
-  constructor(adapterName: string, message: string, correlationId?: string) {
-    super(
-      `Adapter '${adapterName}' error: ${message}`,
-      ErrorCode.ADAPTER_ERROR,
-      { adapterName },
-      correlationId
-    );
+export class RateLimitError extends NetworkError {
+  public readonly retryAfter?: number;
+
+  constructor(
+    message: string,
+    options?: {
+      retryAfter?: number;
+      statusCode?: number;
+      response?: any;
+      context?: Record<string, any>;
+    }
+  ) {
+    super(message, {
+      statusCode: options?.statusCode || 429,
+      response: options?.response,
+      context: options?.context
+    });
+    this.name = 'RateLimitError';
+    this.code = ErrorCode.RATE_LIMIT_EXCEEDED;
+    this.retryAfter = options?.retryAfter;
   }
 }
 
 /**
- * Plugin-related errors
- */
-export class PluginError extends SDKError {
-  constructor(pluginName: string, message: string, correlationId?: string) {
-    super(
-      `Plugin '${pluginName}' error: ${message}`,
-      ErrorCode.PLUGIN_ERROR,
-      { pluginName },
-      correlationId
-    );
-  }
-}
-
-/**
- * Configuration errors
- */
-export class ConfigurationError extends SDKError {
-  constructor(message: string, configKey?: string, correlationId?: string) {
-    super(
-      message,
-      ErrorCode.CONFIGURATION_ERROR,
-      { configKey },
-      correlationId
-    );
-  }
-}
-
-/**
- * Rate limiting errors
- */
-export class RateLimitError extends SDKError {
-  constructor(service: string, retryAfter?: number, correlationId?: string) {
-    super(
-      `Rate limit exceeded for service: ${service}`,
-      ErrorCode.RATE_LIMIT_ERROR,
-      { service, retryAfter },
-      correlationId
-    );
-  }
-}
-
-/**
- * Network and timeout errors
+ * Timeout error
  */
 export class TimeoutError extends SDKError {
-  constructor(operation: string, timeoutMs: number, correlationId?: string) {
+  public readonly timeoutMs: number;
+
+  constructor(
+    message: string,
+    timeoutMs: number,
+    options?: {
+      context?: Record<string, any>;
+    }
+  ) {
     super(
-      `Operation '${operation}' timed out after ${timeoutMs}ms`,
-      ErrorCode.TIMEOUT_ERROR,
-      { operation, timeoutMs },
-      correlationId
+      ErrorCode.TIMEOUT,
+      message,
+      undefined,
+      {
+        severity: ErrorSeverity.WARNING,
+        details: { timeoutMs },
+        context: options?.context
+      }
     );
+    this.name = 'TimeoutError';
+    this.timeoutMs = timeoutMs;
   }
 }
 
-export class NetworkError extends SDKError {
-  constructor(message: string, url?: string, correlationId?: string) {
+/**
+ * Plugin error
+ */
+export class PluginError extends SDKError {
+  constructor(
+    pluginName: string,
+    message: string,
+    code: ErrorCode = ErrorCode.PLUGIN_LOAD_FAILED,
+    options?: {
+      cause?: Error;
+      details?: any;
+      context?: Record<string, any>;
+    }
+  ) {
     super(
-      message,
-      ErrorCode.NETWORK_ERROR,
-      { url },
-      correlationId
+      code,
+      `Plugin error: ${pluginName} - ${message}`,
+      options?.cause,
+      {
+        severity: ErrorSeverity.ERROR,
+        details: options?.details,
+        context: {
+          ...options?.context,
+          pluginName
+        }
+      }
     );
+    this.name = 'PluginError';
+  }
+}
+
+/**
+ * Configuration error
+ */
+export class ConfigError extends SDKError {
+  constructor(
+    message: string,
+    code: ErrorCode = ErrorCode.CONFIG_INVALID,
+    options?: {
+      cause?: Error;
+      details?: any;
+      context?: Record<string, any>;
+    }
+  ) {
+    super(code, message, options?.cause, {
+      severity: ErrorSeverity.ERROR,
+      details: options?.details,
+      context: options?.context
+    });
+    this.name = 'ConfigError';
   }
 }
 
@@ -254,65 +420,111 @@ export class NetworkError extends SDKError {
  */
 export class ErrorHandler {
   /**
-   * Map external API errors to SDK errors
+   * Wrap an error as SDKError if it's not already
    */
-  static mapExternalError(error: any, context: string, correlationId?: string): SDKError {
-    // Handle common HTTP status codes
-    if (error.response) {
-      const status = error.response.status;
-      
-      if (status === 401) {
-        return new AuthenticationError(context, correlationId);
-      }
-      if (status === 403) {
-        return new AuthorizationError(context, correlationId);
-      }
-      if (status === 429) {
-        const retryAfter = error.response.headers['retry-after'];
-        return new RateLimitError(context, retryAfter, correlationId);
-      }
-      if (status >= 500) {
-        return new NetworkError(`Service error: ${status}`, error.config?.url, correlationId);
-      }
+  static wrap(error: any, code?: ErrorCode, context?: Record<string, any>): SDKError {
+    if (error instanceof SDKError) {
+      return error;
     }
-    
-    // Handle timeout errors
-    if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
-      return new TimeoutError(context, error.timeout || 0, correlationId);
+
+    if (error instanceof Error) {
+      return new SDKError(
+        code || ErrorCode.UNKNOWN_ERROR,
+        error.message,
+        error,
+        { context }
+      );
     }
-    
-    // Handle network errors
-    if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
-      return new NetworkError(error.message, error.config?.url, correlationId);
-    }
-    
-    // Default to internal error
+
     return new SDKError(
-      error.message || 'Unknown error',
-      ErrorCode.INTERNAL_ERROR,
-      { originalError: error },
-      correlationId
+      code || ErrorCode.UNKNOWN_ERROR,
+      String(error),
+      undefined,
+      { details: error, context }
     );
   }
 
   /**
-   * Sanitize error for logging (remove sensitive data)
+   * Check if error is retryable
    */
-  static sanitizeError(error: SDKError): any {
-    const sanitized = {
-      name: error.name,
-      code: error.code,
-      message: error.message,
-      timestamp: error.timestamp,
-      correlationId: error.correlationId
-    };
-    
-    // Remove sensitive data from error.data
-    if (error.data) {
-      const { password, token, apiKey, secret, ...safeData } = error.data;
-      return { ...sanitized, data: safeData };
+  static isRetryable(error: SDKError): boolean {
+    const retryableCodes = [
+      ErrorCode.NETWORK_ERROR,
+      ErrorCode.TIMEOUT,
+      ErrorCode.RATE_LIMIT_EXCEEDED,
+      ErrorCode.CONNECTION_FAILED
+    ];
+
+    return retryableCodes.includes(error.code as ErrorCode);
+  }
+
+  /**
+   * Get retry delay for error
+   */
+  static getRetryDelay(error: SDKError, attempt: number): number {
+    if (error instanceof RateLimitError && error.retryAfter) {
+      return error.retryAfter * 1000;
     }
-    
-    return sanitized;
+
+    // Exponential backoff: 1s, 2s, 4s, 8s, ...
+    return Math.min(1000 * Math.pow(2, attempt), 30000);
+  }
+
+  /**
+   * Format error for logging
+   */
+  static format(error: SDKError): string {
+    const parts = [
+      `[${error.code}]`,
+      error.message
+    ];
+
+    if (error.context) {
+      parts.push(`Context: ${JSON.stringify(error.context)}`);
+    }
+
+    if (error.details) {
+      parts.push(`Details: ${JSON.stringify(error.details)}`);
+    }
+
+    if (error.cause) {
+      parts.push(`Cause: ${error.cause.message}`);
+    }
+
+    return parts.join(' | ');
+  }
+}
+
+/**
+ * Create a typed error
+ */
+export function createError(
+  code: ErrorCode,
+  message: string,
+  options?: {
+    cause?: Error | any;
+    severity?: ErrorSeverity;
+    details?: any;
+    context?: Record<string, any>;
+  }
+): SDKError {
+  return new SDKError(code, message, options?.cause, {
+    severity: options?.severity,
+    details: options?.details,
+    context: options?.context
+  });
+}
+
+/**
+ * Assert condition and throw error if false
+ */
+export function assert(
+  condition: boolean,
+  code: ErrorCode,
+  message: string,
+  context?: Record<string, any>
+): asserts condition {
+  if (!condition) {
+    throw new SDKError(code, message, undefined, { context });
   }
 }

@@ -4,142 +4,143 @@
  * Loads credentials from HashiCorp Vault.
  */
 
-import {
-  CredentialProvider,
-  AnyCredential,
-  Credential,
-  CredentialUtils
-} from '../types';
+import { CredentialProvider, Credential, CredentialType } from '../types';
 
 /**
- * Vault provider configuration
+ * Vault provider options
  */
-export interface VaultProviderConfig {
+export interface VaultProviderOptions {
   /** Vault server URL */
   url: string;
+  
   /** Vault token */
   token: string;
-  /** Secret path prefix */
-  pathPrefix?: string;
+  
   /** Vault namespace */
   namespace?: string;
-  /** TLS verification */
-  tlsVerify?: boolean;
+  
+  /** Secret path prefix */
+  pathPrefix?: string;
+  
+  /** KV version (1 or 2) */
+  kvVersion?: 1 | 2;
+  
+  /** Mount point */
+  mountPoint?: string;
 }
 
 /**
- * HashiCorp Vault credential provider
+ * Vault Credential Provider
+ * 
+ * Integrates with HashiCorp Vault for secure credential storage.
+ * This is a placeholder implementation that would require the vault client library.
  */
 export class VaultCredentialProvider implements CredentialProvider {
-  name = 'vault';
-  priority = 75; // Higher than file, lower than env
+  public readonly name = 'vault';
+  private options: VaultProviderOptions;
+  private client: any; // Would be VaultClient from a vault library
 
-  private config: VaultProviderConfig;
-  private cache: Map<string, AnyCredential>;
-
-  constructor(config: VaultProviderConfig) {
-    this.config = {
-      pathPrefix: 'secret/data/credentials',
-      tlsVerify: true,
-      ...config
+  constructor(options: VaultProviderOptions) {
+    this.options = {
+      kvVersion: 2,
+      mountPoint: 'secret',
+      pathPrefix: '',
+      ...options
     };
-    this.cache = new Map();
   }
 
   async initialize(): Promise<void> {
-    // Verify connection to Vault
-    await this.healthCheck();
-  }
-
-  /**
-   * Health check
-   */
-  private async healthCheck(): Promise<void> {
-    // In a real implementation, this would check Vault connectivity
-    // For now, this is a placeholder
-  }
-
-  /**
-   * Get secret path for service
-   */
-  private getSecretPath(service: string): string {
-    return `${this.config.pathPrefix}/${service}`;
-  }
-
-  async getCredential(service: string, scope?: string[]): Promise<AnyCredential | null> {
-    // Check cache first
-    if (this.cache.has(service)) {
-      return this.cache.get(service)!;
-    }
-
-    try {
-      // In a real implementation, this would make an HTTP request to Vault
-      // const response = await fetch(`${this.config.url}/v1/${this.getSecretPath(service)}`, {
-      //   headers: {
-      //     'X-Vault-Token': this.config.token,
-      //     'X-Vault-Namespace': this.config.namespace || ''
-      //   }
-      // });
-      // const data = await response.json();
-      // const credential = this.parseVaultSecret(data.data.data, service);
-
-      // Placeholder: return null for now
-      return null;
-    } catch (error: any) {
-      console.warn(`Failed to get credential from Vault: ${error.message}`);
-      return null;
-    }
-  }
-
-  /**
-   * Parse Vault secret into credential
-   */
-  private parseVaultSecret(data: any, service: string): AnyCredential | null {
-    // This would parse the Vault secret format into our credential format
-    // Implementation depends on how secrets are structured in Vault
-    return null;
-  }
-
-  async hasCredential(service: string, scope?: string[]): Promise<boolean> {
-    const credential = await this.getCredential(service, scope);
-    return credential !== null;
-  }
-
-  async storeCredential(credential: AnyCredential): Promise<void> {
-    // In a real implementation, this would write to Vault
-    // const path = this.getSecretPath(credential.service);
-    // await fetch(`${this.config.url}/v1/${path}`, {
-    //   method: 'POST',
-    //   headers: {
-    //     'X-Vault-Token': this.config.token,
-    //     'X-Vault-Namespace': this.config.namespace || '',
-    //     'Content-Type': 'application/json'
-    //   },
-    //   body: JSON.stringify({ data: credential })
+    // Initialize Vault client
+    // This would use a library like 'node-vault'
+    // Example:
+    // this.client = vault({
+    //   apiVersion: 'v1',
+    //   endpoint: this.options.url,
+    //   token: this.options.token
     // });
-
-    // Update cache
-    this.cache.set(credential.service, credential);
+    
+    throw new Error('Vault provider not yet implemented. Requires vault client library.');
   }
 
-  async deleteCredential(id: string): Promise<boolean> {
-    // In a real implementation, this would delete from Vault
-    // For now, just remove from cache
-    for (const [service, cred] of this.cache.entries()) {
-      if (cred.id === id) {
-        this.cache.delete(service);
-        return true;
+  async getCredential(key: string, scope?: string): Promise<Credential | undefined> {
+    const path = this.buildSecretPath(key, scope);
+    
+    try {
+      // Read secret from Vault
+      // const result = await this.client.read(path);
+      // const data = this.options.kvVersion === 2 ? result.data.data : result.data;
+      
+      // return {
+      //   key,
+      //   value: data.value,
+      //   scope,
+      //   type: CredentialType.CUSTOM,
+      //   metadata: {
+      //     source: 'vault',
+      //     path
+      //   }
+      // };
+      
+      throw new Error('Vault provider not yet implemented');
+    } catch (error) {
+      if (error.response?.statusCode === 404) {
+        return undefined;
       }
+      throw error;
     }
-    return false;
   }
 
-  async listCredentials(): Promise<Credential[]> {
-    // In a real implementation, this would list secrets from Vault
-    return Array.from(this.cache.values()).map(cred => CredentialUtils.sanitize(cred) as Credential);
+  async setCredential(credential: Credential): Promise<void> {
+    const path = this.buildSecretPath(credential.key, credential.scope);
+    
+    // Write secret to Vault
+    // const data = { value: credential.value };
+    // await this.client.write(path, data);
+    
+    throw new Error('Vault provider not yet implemented');
   }
 
-  async shutdown(): Promise<void> {
-    this.cache.clear();
+  async deleteCredential(key: string, scope?: string): Promise<void> {
+    const path = this.buildSecretPath(key, scope);
+    
+    // Delete secret from Vault
+    // await this.client.delete(path);
+    
+    throw new Error('Vault provider not yet implemented');
+  }
+
+  async listCredentials(): Promise<string[]> {
+    // List secrets from Vault
+    // const result = await this.client.list(this.options.pathPrefix);
+    // return result.data.keys || [];
+    
+    throw new Error('Vault provider not yet implemented');
+  }
+
+  supports(operation: string): boolean {
+    return ['get', 'set', 'delete', 'list'].includes(operation);
+  }
+
+  /**
+   * Build secret path
+   */
+  private buildSecretPath(key: string, scope?: string): string {
+    const parts = [this.options.mountPoint];
+    
+    if (this.options.kvVersion === 2) {
+      parts.push('data');
+    }
+    
+    if (this.options.pathPrefix) {
+      parts.push(this.options.pathPrefix);
+    }
+    
+    if (scope) {
+      parts.push(scope);
+    }
+    
+    parts.push(key);
+    
+    return parts.join('/');
   }
 }
