@@ -598,10 +598,21 @@ def main():
         logging.getLogger().setLevel(logging.DEBUG)
     
     if not args.source or not args.target:
-        repo_root = Path(__file__).resolve().parents[4]
+        resolved_path = Path(__file__).resolve()
+        repo_root: Optional[Path] = None
+        for candidate in [resolved_path.parent] + list(resolved_path.parents):
+            if (candidate / ".git").exists():
+                repo_root = candidate
+                break
+        
+        repo_root = repo_root or resolved_path.parents[4]
         default_target = repo_root / "outputs" / "namespace-mcp-scan"
-        args.source = args.source or str(repo_root)
-        args.target = args.target or str(default_target)
+        
+        if not args.source:
+            args.source = str(repo_root)
+        if not args.target:
+            args.target = str(default_target)
+        
         logger.info(
             "未提供路徑，使用默認路徑: source=%s, target=%s",
             args.source,
