@@ -246,7 +246,8 @@ export class ObservationEngine implements IObservationEngine {
   }
   
   async getMetrics(pattern: string, labels?: Record<string, string>): Promise<IMetric[]> {
-    const regex = new RegExp(pattern.replace('*', '.*'));
+    const escapedPattern = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(escapedPattern.replace(/\\\*/g, '.*'));
     const metrics: IMetric[] = [];
     
     for (const [key, metric] of this.metricsStore) {
