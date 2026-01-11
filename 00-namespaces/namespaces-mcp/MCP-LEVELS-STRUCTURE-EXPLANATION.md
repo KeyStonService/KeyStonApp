@@ -31,13 +31,13 @@ machine-native-ops/
     │   ├── docs/                ← Level 2 文檔
     │   └── tests/               ← Level 2 測試
     │
-    ├── mcp-level3/              ← MCP Level 3 (語義控制平面)
+    ├── namespaces-mcp/level3/              ← MCP Level 3 (語義控制平面)
     │   ├── engines/             ← Level 3 語義引擎
     │   ├── rag/                 ← Level 3 RAG 系統
     │   ├── dag/                 ← Level 3 DAG 工作流
     │   └── ...
     │
-    └── mcp-level4/              ← MCP Level 4 (自主演化)
+    └── namespaces-mcp/level4/              ← MCP Level 4 (自主演化)
         ├── interfaces/          ← Level 4 接口定義
         ├── engines/             ← Level 4 自主引擎
         └── ...
@@ -64,7 +64,7 @@ machine-native-ops/
 - ~260 KB 生產級 YAML 配置
 - 完整的源代碼實現
 
-### MCP Level 3 (`mcp-level3/`)
+### MCP Level 3 (`namespaces-mcp/level3/`)
 
 **定位:** 語義控制平面 - Semantic Control Plane
 
@@ -77,7 +77,7 @@ machine-native-ops/
 
 **狀態:** 75% 完成 (3/4 階段)
 
-### MCP Level 4 (`mcp-level4/`)
+### MCP Level 4 (`namespaces-mcp/level4/`)
 
 **定位:** 自主演化層 - Semantic Autonomy
 
@@ -133,7 +133,7 @@ Level 2 (基礎設施) ← namespaces-mcp
 - `specs/monitoring-observability.spec.yaml`
 - `policies/configuration-governance.policy.yaml`
 
-### 識別 Level 3 (mcp-level3/)
+### 識別 Level 3 (namespaces-mcp/level3/)
 
 **特徵:**
 - 包含 `engines/` 目錄
@@ -145,7 +145,7 @@ Level 2 (基礎設施) ← namespaces-mcp
 - `engines/dag-engine.ts`
 - `engines/taxonomy-engine.ts`
 
-### 識別 Level 4 (mcp-level4/)
+### 識別 Level 4 (namespaces-mcp/level4/)
 
 **特徵:**
 - 包含 `interfaces/` 目錄
@@ -164,8 +164,8 @@ Level 2 (基礎設施) ← namespaces-mcp
 | 層級 | 目錄 | 完成度 | 狀態 |
 |------|------|--------|------|
 | Level 2 | `namespaces-mcp/` | 100% | ✅ 完成 |
-| Level 3 | `mcp-level3/` | 75% | 🚧 進行中 |
-| Level 4 | `mcp-level4/` | 75% | 🚧 進行中 |
+| Level 3 | `namespaces-mcp/level3/` | 75% | 🚧 進行中 |
+| Level 4 | `namespaces-mcp/level4/` | 75% | 🚧 進行中 |
 
 ---
 
