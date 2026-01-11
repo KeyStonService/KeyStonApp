@@ -105,6 +105,12 @@ See individual project README files for detailed setup instructions:
 - namespaces-mcp Quick Start (coming soon)
 - namespaces-adk Quick Start (coming soon)
 
+## Documentation layout
+
+- **MCP namespace reports:** `./namespaces-mcp/docs/reports/`
+- **MCP Level 3 phase & module reports:** `./namespaces-mcp/mcp-level3/docs/reports/`
+- **Root namespace plans & guides:** `./docs/`
+
 ## Development
 
 ### Building All Projects
