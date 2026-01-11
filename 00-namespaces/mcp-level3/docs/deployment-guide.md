@@ -1,5 +1,11 @@
 # MCP Level 3 - Deployment Guide
 
+> **⚠️ SECURITY NOTICE:**  
+> This guide contains placeholder values like `<YOUR_SECURE_PASSWORD>` and `<YOUR_JWT_SECRET>`.  
+> **NEVER use these placeholders or simple passwords like "changeme" in production.**  
+> Always replace them with strong, randomly generated passwords and secrets.  
+> Use a password manager or secret management tool (like HashiCorp Vault, AWS Secrets Manager, or Kubernetes Secrets) to generate and store production credentials securely.
+
 ## Table of Contents
 
 1. [Prerequisites](#prerequisites)
@@ -71,7 +77,7 @@ kubectl label namespace mcp-system istio-injection=enabled
 helm repo add bitnami https://charts.bitnami.com/bitnami
 helm install postgresql bitnami/postgresql \
   --namespace mcp-system \
-  --set auth.postgresPassword=changeme \
+  --set auth.postgresPassword=<YOUR_SECURE_PASSWORD> \
   --set primary.persistence.size=100Gi \
   --set readReplicas.replicaCount=2
 ```
@@ -81,7 +87,7 @@ helm install postgresql bitnami/postgresql \
 ```bash
 helm install redis bitnami/redis \
   --namespace mcp-system \
-  --set auth.password=changeme \
+  --set auth.password=<YOUR_SECURE_PASSWORD> \
   --set cluster.enabled=true \
   --set cluster.nodes=6 \
   --set persistence.size=50Gi
@@ -93,7 +99,7 @@ helm install redis bitnami/redis \
 helm repo add neo4j https://helm.neo4j.com/neo4j
 helm install neo4j neo4j/neo4j \
   --namespace mcp-system \
-  --set neo4j.password=changeme \
+  --set neo4j.password=<YOUR_SECURE_PASSWORD> \
   --set volumes.data.mode=defaultStorageClass \
   --set volumes.data.defaultStorageClass.requests.storage=200Gi
 ```
@@ -105,7 +111,7 @@ helm repo add minio https://charts.min.io/
 helm install minio minio/minio \
   --namespace mcp-system \
   --set rootUser=admin \
-  --set rootPassword=changeme \
+  --set rootPassword=<YOUR_SECURE_PASSWORD> \
   --set persistence.size=1Ti \
   --set replicas=4
 ```
@@ -116,12 +122,12 @@ helm install minio minio/minio \
 # Create secrets
 kubectl create secret generic mcp-secrets \
   --namespace mcp-system \
-  --from-literal=postgres-password=changeme \
-  --from-literal=redis-password=changeme \
-  --from-literal=neo4j-password=changeme \
+  --from-literal=postgres-password=<YOUR_SECURE_PASSWORD> \
+  --from-literal=redis-password=<YOUR_SECURE_PASSWORD> \
+  --from-literal=neo4j-password=<YOUR_SECURE_PASSWORD> \
   --from-literal=minio-access-key=admin \
-  --from-literal=minio-secret-key=changeme \
-  --from-literal=jwt-secret=your-jwt-secret
+  --from-literal=minio-secret-key=<YOUR_SECURE_PASSWORD> \
+  --from-literal=jwt-secret=<YOUR_JWT_SECRET>
 ```
 
 ### 4. Create ConfigMap
@@ -341,7 +347,7 @@ services:
     environment:
       POSTGRES_DB: mcp
       POSTGRES_USER: mcp
-      POSTGRES_PASSWORD: changeme
+      POSTGRES_PASSWORD: <YOUR_SECURE_PASSWORD>
     volumes:
       - postgres-data:/var/lib/postgresql/data
     ports:
@@ -349,7 +355,7 @@ services:
   
   redis:
     image: redis:7-alpine
-    command: redis-server --requirepass changeme
+    command: redis-server --requirepass <YOUR_SECURE_PASSWORD>
     volumes:
       - redis-data:/data
     ports:
@@ -358,7 +364,7 @@ services:
   neo4j:
     image: neo4j:5
     environment:
-      NEO4J_AUTH: neo4j/changeme
+      NEO4J_AUTH: neo4j/<YOUR_SECURE_PASSWORD>
     volumes:
       - neo4j-data:/data
     ports:
@@ -370,7 +376,7 @@ services:
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: admin
-      MINIO_ROOT_PASSWORD: changeme
+      MINIO_ROOT_PASSWORD: <YOUR_SECURE_PASSWORD>
     volumes:
       - minio-data:/data
     ports:
@@ -581,13 +587,13 @@ POSTGRES_HOST=localhost
 POSTGRES_PORT=5432
 POSTGRES_DB=mcp
 POSTGRES_USER=mcp
-POSTGRES_PASSWORD=changeme
+POSTGRES_PASSWORD=<YOUR_SECURE_PASSWORD>
 POSTGRES_MAX_CONNECTIONS=100
 
 # Redis Configuration
 REDIS_HOST=localhost
 REDIS_PORT=6379
-REDIS_PASSWORD=changeme
+REDIS_PASSWORD=<YOUR_SECURE_PASSWORD>
 REDIS_DB=0
 REDIS_MAX_CONNECTIONS=50
 
@@ -595,12 +601,12 @@ REDIS_MAX_CONNECTIONS=50
 NEO4J_HOST=localhost
 NEO4J_PORT=7687
 NEO4J_USER=neo4j
-NEO4J_PASSWORD=changeme
+NEO4J_PASSWORD=<YOUR_SECURE_PASSWORD>
 
 # MinIO Configuration
 MINIO_ENDPOINT=localhost:9000
 MINIO_ACCESS_KEY=admin
-MINIO_SECRET_KEY=changeme
+MINIO_SECRET_KEY=<YOUR_SECURE_PASSWORD>
 MINIO_BUCKET=mcp-artifacts
 MINIO_USE_SSL=false
 
@@ -626,7 +632,7 @@ LOG_FORMAT=json
 LOG_OUTPUT=stdout
 
 # Security
-JWT_SECRET=your-secret-key
+JWT_SECRET=<YOUR_JWT_SECRET>
 JWT_EXPIRATION=3600
 ENABLE_CORS=true
 CORS_ORIGINS=*
