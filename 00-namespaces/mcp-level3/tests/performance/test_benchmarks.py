@@ -8,7 +8,6 @@ import pytest
 import asyncio
 import aiohttp
 import time
-import statistics
 from typing import List, Dict, Any
 from dataclasses import dataclass
 import json
