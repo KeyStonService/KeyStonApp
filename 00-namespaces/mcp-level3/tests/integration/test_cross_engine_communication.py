@@ -365,7 +365,7 @@ class TestEndToEndFlow:
                 json={"artifact_id": doc_id}
             ) as response:
                 assert response.status == 202
-                index_job_id = (await response.json())["job_id"]
+                assert "job_id" in await response.json()
             
             # Wait for indexing to complete
             await asyncio.sleep(10)
