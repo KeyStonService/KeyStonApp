@@ -8,7 +8,6 @@ import pytest
 import asyncio
 import aiohttp
 import time
-import json
 
 
 class TestRAGTaxonomyIntegration:
